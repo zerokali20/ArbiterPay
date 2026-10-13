@@ -37,18 +37,30 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <div className="flex flex-wrap gap-4 justify-center">
             <Link
               href="/jobs/new"
-              className="inline-flex items-center justify-center px-6 py-3 border border-transparent text-base font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm"
+              className="inline-flex items-center justify-center px-5 py-3 border border-transparent text-sm font-bold rounded-xl text-white bg-blue-600 hover:bg-blue-700 shadow-sm"
             >
-              💼 Create New Escrow Job
+              💼 Create Escrow Job
             </Link>
             <Link
               href="/jobs/sample-demo-job"
-              className="inline-flex items-center justify-center px-6 py-3 border border-slate-300 text-base font-bold rounded-xl text-slate-800 bg-white hover:bg-slate-50 shadow-sm"
+              className="inline-flex items-center justify-center px-5 py-3 border border-slate-300 text-sm font-bold rounded-xl text-slate-800 bg-white hover:bg-slate-50 shadow-sm"
             >
-              ⚡ Explore Demo Escrow Flow
+              ⚡ Interactive Escrow Demo
+            </Link>
+            <Link
+              href="/ledger"
+              className="inline-flex items-center justify-center px-5 py-3 border border-slate-300 text-sm font-bold rounded-xl text-blue-700 bg-blue-50 hover:bg-blue-100 shadow-sm"
+            >
+              📊 AG Grid Audit Ledger
+            </Link>
+            <Link
+              href="/review"
+              className="inline-flex items-center justify-center px-5 py-3 border border-slate-300 text-sm font-bold rounded-xl text-amber-800 bg-amber-50 hover:bg-amber-100 shadow-sm"
+            >
+              🛡️ Human Review
             </Link>
           </div>
         </div>
