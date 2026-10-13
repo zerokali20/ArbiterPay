@@ -25,7 +25,8 @@
     <img src="https://img.shields.io/badge/Render-46E3B7?style=for-the-badge&logo=render&logoColor=white" alt="Render"/>
   </p>
 
-  <a href="#demo-video"><strong>🎬 Watch the Demo Video »</strong></a>
+  <a href="https://arbiterpay.onrender.com"><strong>🌐 Live Demo (Render) »</strong></a> •
+  <a href="#demo-video"><strong>🎬 Demo Video »</strong></a>
   <br />
   <a href="#getting-started">🚀 Setup Instructions</a> •
   <a href="#how-it-works">⚙️ How it Works</a> •
