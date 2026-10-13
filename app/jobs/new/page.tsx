@@ -69,7 +69,6 @@ export default function NewJobPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create job');
 
-      alert(`Job created successfully! Total escrow required: $${totalAmount}`);
       router.push(`/jobs/${data.job.id}`);
     } catch (err: any) {
       alert(`Error creating job: ${err.message}`);
@@ -79,121 +78,113 @@ export default function NewJobPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <a href="/" className="text-sm font-medium text-blue-600 hover:text-blue-500">
-            ← Back to Home
-          </a>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight text-slate-900">
-            Create Escrow Job with Milestones
-          </h1>
-          <p className="mt-1 text-sm text-slate-600">
-            Define verifiable milestones with strict acceptance criteria. Funds are held in PayPal sandbox escrow until Arbiter AI approves each deliverable.
-          </p>
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-8 font-sans">
+      <div>
+        <div className="text-[11px] font-mono text-[#81848b] uppercase tracking-wider">
+          Job Setup
+        </div>
+        <h1 className="text-2xl font-bold tracking-tight text-[#ececed] mt-1">
+          Create Escrow Job
+        </h1>
+        <p className="text-xs font-mono text-[#81848b] mt-0.5">
+          Define verifiable milestones with strict acceptance criteria. Funds sit in PayPal sandbox escrow until Arbiter approvals.
+        </p>
+      </div>
+
+      <form onSubmit={handleSubmit} className="space-y-6 p-6 rounded-lg bg-[#0e0f10] border border-[#212225]">
+        <div className="space-y-1">
+          <label className="block text-xs font-mono text-[#81848b]">Job Title</label>
+          <input
+            type="text"
+            required
+            className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+          />
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6 bg-white p-8 rounded-xl shadow-sm border border-slate-200">
-          <div>
-            <label className="block text-sm font-semibold text-slate-700">Job Title</label>
+        <div className="space-y-1">
+          <label className="block text-xs font-mono text-[#81848b]">Brief / Scope Description</label>
+          <textarea
+            required
+            rows={3}
+            className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+          />
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <label className="block text-xs font-mono text-[#81848b]">Client Email (Sandbox Payer)</label>
             <input
-              type="text"
+              type="email"
               required
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+              value={clientEmail}
+              onChange={(e) => setClientEmail(e.target.value)}
             />
           </div>
-
-          <div>
-            <label className="block text-sm font-semibold text-slate-700">Job Description</label>
-            <textarea
+          <div className="space-y-1">
+            <label className="block text-xs font-mono text-[#81848b]">Freelancer PayPal Email (Receiver)</label>
+            <input
+              type="email"
               required
-              rows={3}
-              className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
+              className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+              value={freelancerEmail}
+              onChange={(e) => setFreelancerEmail(e.target.value)}
             />
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Client Email (Sandbox)</label>
-              <input
-                type="email"
-                required
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={clientEmail}
-                onChange={(e) => setClientEmail(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-slate-700">Freelancer PayPal Email (Receiver)</label>
-              <input
-                type="email"
-                required
-                className="mt-1 block w-full rounded-md border border-slate-300 px-3 py-2 text-slate-900 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                value={freelancerEmail}
-                onChange={(e) => setFreelancerEmail(e.target.value)}
-              />
-            </div>
+        <div className="border-t border-[#212225] pt-6 space-y-4">
+          <div className="flex justify-between items-center text-xs font-mono">
+            <span className="font-semibold text-[#ececed]">Milestones ({milestones.length})</span>
+            <span className="text-[#4cb782] font-bold">Total: ${totalAmount} USD</span>
           </div>
 
-          <div className="border-t border-slate-200 pt-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-semibold text-slate-900">
-                Milestones ({milestones.length})
-              </h3>
-              <span className="text-sm font-bold text-blue-600 bg-blue-50 px-3 py-1 rounded-full">
-                Total: ${totalAmount} USD
-              </span>
-            </div>
-
-            <div className="space-y-4">
-              {milestones.map((m, idx) => (
-                <div key={idx} className="p-4 rounded-lg border border-slate-200 bg-slate-50 space-y-3">
-                  <div className="flex justify-between items-center">
-                    <span className="font-medium text-slate-800">Milestone #{idx + 1}</span>
-                    <span className="font-semibold text-slate-900">${m.amount} USD</span>
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={m.title}
-                    onChange={(e) => {
-                      const updated = [...milestones];
-                      updated[idx].title = e.target.value;
-                      setMilestones(updated);
-                    }}
-                    className="block w-full rounded-md border border-slate-300 px-3 py-1.5 text-sm bg-white"
-                  />
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wider text-slate-500">
-                      Criteria ({m.criteria.length})
-                    </span>
-                    <ul className="mt-1 space-y-1">
-                      {m.criteria.map((c, cIdx) => (
-                        <li key={cIdx} className="text-xs text-slate-600 flex items-start">
-                          <span className="mr-1.5 text-blue-500">•</span>
-                          {c.description}
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
+          <div className="space-y-3">
+            {milestones.map((m, idx) => (
+              <div key={idx} className="p-4 rounded bg-[#141517] border border-[#212225] space-y-3 font-mono text-xs">
+                <div className="flex justify-between items-center">
+                  <span className="text-[#81848b]">0{idx + 1}</span>
+                  <span className="text-[#ececed] font-bold">${m.amount} USD</span>
                 </div>
-              ))}
-            </div>
+                <input
+                  type="text"
+                  required
+                  value={m.title}
+                  onChange={(e) => {
+                    const updated = [...milestones];
+                    updated[idx].title = e.target.value;
+                    setMilestones(updated);
+                  }}
+                  className="w-full rounded bg-[#0e0f10] border border-[#212225] px-3 py-1.5 text-xs text-[#ececed]"
+                />
+                <div className="space-y-1">
+                  <span className="text-[10px] text-[#81848b] uppercase">Criteria:</span>
+                  <ul className="space-y-0.5 text-[#9b9da3] text-[11px]">
+                    {m.criteria.map((c, cIdx) => (
+                      <li key={cIdx} className="flex items-start gap-1.5">
+                        <span className="text-[#81848b]">•</span>
+                        <span>{c.description}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            ))}
           </div>
+        </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full flex justify-center py-3 px-4 border border-transparent rounded-lg shadow-sm text-base font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none disabled:opacity-50"
-          >
-            {loading ? 'Creating Job...' : `Create Job & Proceed to PayPal Escrow Funding ($${totalAmount})`}
-          </button>
-        </form>
-      </div>
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full py-2.5 rounded bg-[#ececed] text-[#08090a] font-mono text-xs font-bold hover:bg-white transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Creating Job...' : `Create Job & Fund via PayPal Sandbox ($${totalAmount})`}
+        </button>
+      </form>
     </div>
   );
 }

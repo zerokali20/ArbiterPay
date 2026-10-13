@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 
 export default function JobDetailPage() {
   const params = useParams();
@@ -14,7 +15,6 @@ export default function JobDetailPage() {
   const [verdictResult, setVerdictResult] = useState<any>(null);
   const [evaluating, setEvaluating] = useState(false);
 
-  // Mock milestones matching the flow for instant demo & live test
   const [milestonesList, setMilestonesList] = useState([
     {
       id: 'ms-01',
@@ -49,11 +49,9 @@ export default function JobDetailPage() {
     },
   ]);
 
-  // PayPal Funding Trigger (Orders v2)
   const handleFundEscrow = async () => {
     setFunding(true);
     try {
-      // 1. Create PayPal Order
       const res = await fetch(`/api/jobs/${jobId}/fund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -62,7 +60,6 @@ export default function JobDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create PayPal order');
 
-      // 2. Capture Order for Escrow
       const captureRes = await fetch(`/api/jobs/${jobId}/fund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -75,7 +72,6 @@ export default function JobDetailPage() {
       setMilestonesList((prev) =>
         prev.map((m, i) => (i === 0 ? { ...m, status: 'in_progress' } : m))
       );
-      alert(`🎉 PayPal Sandbox Escrow Funded!\nCaptured Order: ${data.orderId}\nFunds held securely in platform escrow account.`);
     } catch (err: any) {
       alert(`Funding error: ${err.message}`);
     } finally {
@@ -83,7 +79,6 @@ export default function JobDetailPage() {
     }
   };
 
-  // Submit Deliverable & Trigger AI Arbiter + Deterministic Policy
   const handleSubmitDeliverable = async (milestoneIdx: number) => {
     setEvaluating(true);
     const m = milestonesList[milestoneIdx];
@@ -140,8 +135,6 @@ export default function JobDetailPage() {
       if (!res.ok) throw new Error(data.error || 'Submission failed');
 
       setVerdictResult(data);
-
-      // Update milestone status in UI
       setMilestonesList((prev) =>
         prev.map((item, i) =>
           i === milestoneIdx
@@ -158,209 +151,225 @@ export default function JobDetailPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 py-10 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto space-y-8">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-xl border border-slate-200">
-          <div>
-            <span className="text-xs font-bold uppercase tracking-wider text-blue-600">
-              Escrow Job ID: {jobId}
-            </span>
-            <h1 className="text-2xl font-bold text-slate-900 mt-1">
-              Production Microservice & Automated CI Pipeline
-            </h1>
-            <p className="text-sm text-slate-600 mt-1">
-              Total Escrow: <strong>$150.00 USD</strong> (3 Milestones)
-            </p>
-          </div>
-
-          <div className="flex items-center gap-3">
+    <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-8 font-sans">
+      {/* Top Header Card */}
+      <div className="p-6 rounded-lg bg-[#0e0f10] border border-[#212225] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-[11px] font-mono text-[#81848b]">JOB ID: {jobId}</span>
             <span
-              className={`px-3 py-1 rounded-full text-xs font-semibold ${
+              className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
                 jobStatus === 'funded'
-                  ? 'bg-green-100 text-green-800'
-                  : 'bg-amber-100 text-amber-800'
+                  ? 'bg-[#1a2e23] text-[#4cb782] border-[#254634]'
+                  : 'bg-[#2a2417] text-[#d9a441] border-[#3f3521]'
               }`}
             >
-              Status: {jobStatus.toUpperCase()}
+              {jobStatus}
             </span>
-
-            {jobStatus === 'draft' && (
-              <button
-                onClick={handleFundEscrow}
-                disabled={funding}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg font-medium text-sm hover:bg-blue-700 disabled:opacity-50 flex items-center gap-2 shadow-sm"
-              >
-                {funding ? 'Funding...' : '💳 Fund $150 via PayPal Sandbox'}
-              </button>
-            )}
           </div>
+          <h1 className="text-xl font-bold text-[#ececed] mt-1.5">
+            Production Microservice & Automated CI Pipeline
+          </h1>
+          <p className="text-xs font-mono text-[#81848b] mt-1">
+            Total Escrow: $150.00 USD • 3 Milestones • Receiver: sb-okeek53339723@personal.example.com
+          </p>
         </div>
 
-        {/* Verdict Results Banner */}
-        {verdictResult && (
-          <div
-            className={`p-6 rounded-xl border ${
-              verdictResult.verdict.overallResult === 'pass'
-                ? 'bg-emerald-50 border-emerald-200'
-                : verdictResult.verdict.overallResult === 'fail'
-                ? 'bg-rose-50 border-rose-200'
-                : 'bg-amber-50 border-amber-200'
-            }`}
-          >
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-lg text-slate-900">
-                🤖 AI Arbiter Verdict:{' '}
-                <span className="uppercase">
-                  {verdictResult.verdict.overallResult}
-                </span>{' '}
+        <div>
+          {jobStatus === 'draft' ? (
+            <button
+              onClick={handleFundEscrow}
+              disabled={funding}
+              className="px-4 py-2 rounded bg-[#ececed] text-[#08090a] font-mono text-xs font-bold hover:bg-white transition-colors disabled:opacity-50"
+            >
+              {funding ? 'Funding via PayPal...' : 'Fund $150.00 via PayPal Sandbox'}
+            </button>
+          ) : (
+            <div className="px-3 py-1.5 rounded bg-[#141517] border border-[#212225] text-xs font-mono text-[#4cb782]">
+              ✓ Escrow Funded (Orders v2 Captured)
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* AI Verdict Inspection Banner */}
+      {verdictResult && (
+        <div
+          className={`p-6 rounded-lg border font-mono ${
+            verdictResult.verdict.overallResult === 'pass'
+              ? 'bg-[#0f1713] border-[#254634]'
+              : verdictResult.verdict.overallResult === 'fail'
+              ? 'bg-[#1c1214] border-[#4c1e22]'
+              : 'bg-[#1a1711] border-[#3f3521]'
+          }`}
+        >
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-[#212225] pb-3 mb-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-[#81848b]">VERDICT:</span>
+              <span
+                className={`font-bold text-xs uppercase px-2 py-0.5 rounded ${
+                  verdictResult.verdict.overallResult === 'pass'
+                    ? 'text-[#4cb782] bg-[#1a2e23]'
+                    : verdictResult.verdict.overallResult === 'fail'
+                    ? 'text-[#e5484d] bg-[#311518]'
+                    : 'text-[#d9a441] bg-[#2a2417]'
+                }`}
+              >
+                {verdictResult.verdict.overallResult}
+              </span>
+              <span className="text-xs text-[#81848b]">
                 (Confidence: {verdictResult.verdict.confidence})
-              </h3>
-              <span className="text-xs px-2.5 py-1 rounded bg-white font-mono text-slate-700 border">
-                Policy Action: {verdictResult.policyDecision.action}
               </span>
             </div>
-            <p className="text-sm text-slate-700 mb-4">
-              {verdictResult.verdict.summary}
-            </p>
 
-            {verdictResult.policyDecision.payoutBatchId && (
-              <div className="mb-4 p-3 bg-white rounded border border-emerald-300 text-xs font-mono text-emerald-800">
-                ✅ PayPal Payout Batch Released:{' '}
-                <strong>{verdictResult.policyDecision.payoutBatchId}</strong>
-                <br />
-                Sent to: sb-okeek53339723@personal.example.com ($50.00 USD)
-              </div>
-            )}
-
-            {verdictResult.verdict.fixList?.length > 0 && (
-              <div className="p-3 bg-white rounded border border-rose-300">
-                <span className="text-xs font-bold text-rose-800 block mb-1">
-                  Required Fixes Before Payout Approval:
-                </span>
-                <ul className="text-xs text-rose-700 list-disc list-inside space-y-1">
-                  {verdictResult.verdict.fixList.map((fix: string, idx: number) => (
-                    <li key={idx}>{fix}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
+            <div className="text-xs text-[#ececed]">
+              Policy Action: <strong className="text-white">{verdictResult.policyDecision.action}</strong>
+            </div>
           </div>
-        )}
 
-        {/* Milestones List */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold text-slate-900">Escrow Milestones</h2>
+          <p className="text-xs text-[#ececed] mb-4 font-sans leading-relaxed">
+            {verdictResult.verdict.summary}
+          </p>
+
+          {verdictResult.policyDecision.payoutBatchId && (
+            <div className="p-3 rounded bg-[#08090a] border border-[#254634] text-xs text-[#4cb782] mb-3">
+              ✓ PayPal Payout Released: Batch ID{' '}
+              <span className="font-bold">{verdictResult.policyDecision.payoutBatchId}</span>
+              <br />
+              <span className="text-[#81848b] text-[11px]">
+                Target account credited: sb-okeek53339723@personal.example.com ($50.00 USD)
+              </span>
+            </div>
+          )}
+
+          {verdictResult.verdict.fixList?.length > 0 && (
+            <div className="p-3 rounded bg-[#08090a] border border-[#4c1e22] text-xs text-[#e5484d]">
+              <span className="font-bold block mb-1">Generated Fix-List:</span>
+              <ul className="list-disc list-inside space-y-1 text-xs">
+                {verdictResult.verdict.fixList.map((fix: string, idx: number) => (
+                  <li key={idx}>{fix}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Milestones Flow Table / Cards */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-bold text-[#ececed]">
+            Escrow Milestones ({milestonesList.length})
+          </h2>
+          <span className="text-xs font-mono text-[#81848b]">
+            Evaluation Mode: Strict Acceptance Checklist
+          </span>
+        </div>
+
+        <div className="space-y-3">
           {milestonesList.map((m, idx) => (
             <div
               key={m.id}
-              className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm space-y-4"
+              className="p-5 rounded-lg bg-[#0e0f10] border border-[#212225] space-y-4"
             >
-              <div className="flex justify-between items-start">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-semibold text-slate-900">{m.title}</span>
-                    <span
-                      className={`text-xs px-2 py-0.5 rounded font-medium ${
-                        m.status === 'paid'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : m.status === 'failed'
-                          ? 'bg-rose-100 text-rose-800'
-                          : m.status === 'disputed'
-                          ? 'bg-amber-100 text-amber-800'
-                          : m.status === 'in_progress'
-                          ? 'bg-blue-100 text-blue-800'
-                          : 'bg-slate-100 text-slate-600'
-                      }`}
-                    >
-                      {m.status.toUpperCase()}
-                    </span>
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-mono text-[#81848b]">0{idx + 1}</span>
+                  <div>
+                    <h3 className="text-sm font-semibold text-[#ececed]">{m.title}</h3>
+                    <span className="text-xs font-mono text-[#81848b]">Amount: ${m.amount} USD</span>
                   </div>
-                  <span className="text-sm font-bold text-slate-700">
-                    Amount: ${m.amount} USD
-                  </span>
                 </div>
 
-                {jobStatus === 'funded' && m.status !== 'paid' && (
-                  <button
-                    onClick={() => setSubmittingMilestone(idx)}
-                    className="px-3 py-1.5 bg-slate-900 text-white rounded text-xs font-medium hover:bg-slate-800"
+                <div className="flex items-center gap-3">
+                  <span
+                    className={`text-xs font-mono px-2 py-0.5 rounded uppercase border ${
+                      m.status === 'paid'
+                        ? 'bg-[#1a2e23] text-[#4cb782] border-[#254634]'
+                        : m.status === 'failed'
+                        ? 'bg-[#311518] text-[#e5484d] border-[#4c1e22]'
+                        : m.status === 'disputed'
+                        ? 'bg-[#2a2417] text-[#d9a441] border-[#3f3521]'
+                        : 'bg-[#141517] text-[#81848b] border-[#212225]'
+                    }`}
                   >
-                    📤 Submit Deliverable
-                  </button>
-                )}
+                    {m.status}
+                  </span>
+
+                  {jobStatus === 'funded' && m.status !== 'paid' && (
+                    <button
+                      onClick={() => setSubmittingMilestone(idx)}
+                      className="px-3 py-1.5 rounded bg-[#1a1b1e] hover:bg-[#212225] border border-[#2d2f33] text-xs font-mono text-[#ececed] transition-colors"
+                    >
+                      Submit deliverable →
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {/* Acceptance Criteria */}
-              <div>
-                <span className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                  Acceptance Criteria
-                </span>
-                <ul className="mt-1 space-y-1">
+              {/* Criteria */}
+              <div className="text-xs space-y-1 pt-2 border-t border-[#1a1b1e]">
+                <span className="text-[11px] font-mono text-[#81848b] uppercase">Criteria:</span>
+                <ul className="space-y-1 text-[#9b9da3]">
                   {m.criteria.map((c, cIdx) => (
-                    <li key={cIdx} className="text-xs text-slate-600 flex items-start">
-                      <span className="mr-1.5 text-blue-500">•</span>
-                      {c}
+                    <li key={cIdx} className="flex items-start gap-2">
+                      <span className="text-[#81848b]">•</span>
+                      <span>{c}</span>
                     </li>
                   ))}
                 </ul>
               </div>
 
-              {/* Submission Modal / Box */}
+              {/* Submission drawer */}
               {submittingMilestone === idx && (
-                <div className="mt-4 p-4 border border-blue-200 bg-blue-50/50 rounded-lg space-y-3">
-                  <h4 className="text-sm font-bold text-slate-900">
-                    Submit Deliverable for Arbiter AI Evaluation
-                  </h4>
+                <div className="p-4 rounded bg-[#141517] border border-[#2d2f33] space-y-3 font-mono text-xs">
+                  <div className="font-semibold text-[#ececed]">
+                    Test Scenario Selection for AI Arbiter:
+                  </div>
 
-                  <div className="space-y-1">
-                    <label className="text-xs font-semibold text-slate-700">
-                      Select Demo Test Scenario:
+                  <div className="flex flex-wrap gap-4 text-xs text-[#9b9da3]">
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="scenario"
+                        checked={submissionScenario === 'pass'}
+                        onChange={() => setSubmissionScenario('pass')}
+                      />
+                      <span className="text-[#4cb782]">Pass (bcrypt + tests)</span>
                     </label>
-                    <div className="flex gap-4">
-                      <label className="text-xs flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name="scenario"
-                          checked={submissionScenario === 'pass'}
-                          onChange={() => setSubmissionScenario('pass')}
-                        />
-                        Pass (Valid bcrypt + tests)
-                      </label>
-                      <label className="text-xs flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name="scenario"
-                          checked={submissionScenario === 'fail'}
-                          onChange={() => setSubmissionScenario('fail')}
-                        />
-                        Fail (Plaintext passwords, no tests)
-                      </label>
-                      <label className="text-xs flex items-center gap-1.5">
-                        <input
-                          type="radio"
-                          name="scenario"
-                          checked={submissionScenario === 'ambiguous'}
-                          onChange={() => setSubmissionScenario('ambiguous')}
-                        />
-                        Ambiguous (Routes to Human)
-                      </label>
-                    </div>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="scenario"
+                        checked={submissionScenario === 'fail'}
+                        onChange={() => setSubmissionScenario('fail')}
+                      />
+                      <span className="text-[#e5484d]">Fail (plaintext, no tests)</span>
+                    </label>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer">
+                      <input
+                        type="radio"
+                        name="scenario"
+                        checked={submissionScenario === 'ambiguous'}
+                        onChange={() => setSubmissionScenario('ambiguous')}
+                      />
+                      <span className="text-[#d9a441]">Ambiguous (Human review)</span>
+                    </label>
                   </div>
 
                   <div className="flex gap-2 pt-2">
                     <button
                       onClick={() => handleSubmitDeliverable(idx)}
                       disabled={evaluating}
-                      className="px-4 py-2 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 disabled:opacity-50"
+                      className="px-3 py-1.5 rounded bg-[#ececed] text-[#08090a] font-bold hover:bg-white transition-colors disabled:opacity-50"
                     >
-                      {evaluating
-                        ? 'Arbitrating with AI...'
-                        : '🤖 Run AI Arbitration & Trigger Policy'}
+                      {evaluating ? 'Running Arbiter...' : 'Run Arbitration'}
                     </button>
                     <button
                       onClick={() => setSubmittingMilestone(null)}
-                      className="px-3 py-2 bg-white text-slate-700 border rounded text-xs font-medium"
+                      className="px-3 py-1.5 rounded bg-[#1a1b1e] text-[#81848b] hover:text-white"
                     >
                       Cancel
                     </button>
