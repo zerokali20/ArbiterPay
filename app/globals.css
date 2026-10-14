@@ -2,7 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Light mode defaults */
 :root {
+  --bg: #f8fafc;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f1f5f9;
+  --border: #e2e8f0;
+  --border-light: #cbd5e1;
+  --text-main: #0f172a;
+  --text-muted: #64748b;
+  --text-sub: #475569;
+  --accent-green: #10b981;
+  --accent-amber: #f59e0b;
+  --accent-blue: #2563eb;
+  --accent-red: #ef4444;
+}
+
+/* Dark mode (default & class="dark") */
+html.dark {
   --bg: #08090a;
   --bg-card: #0e0f10;
   --bg-card-hover: #141517;
@@ -22,9 +39,50 @@ body {
   color: var(--text-main);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   letter-spacing: -0.01em;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 /* Monospace font utility */
 .font-mono-code {
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
+/* Welcome Screen Keyframes */
+@keyframes welcomeLetterIn {
+  0% {
+    transform: translateY(110%);
+    opacity: 0;
+  }
+  100% {
+    transform: translateY(0%);
+    opacity: 1;
+  }
+}
+
+@keyframes welcomeFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes welcomeProgressBar {
+  0% {
+    transform: scaleX(0);
+  }
+  100% {
+    transform: scaleX(1);
+  }
+}
+
+.animate-welcome-sub {
+  animation: welcomeFadeIn 0.7s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-welcome-progress {
+  animation: welcomeProgressBar 2.3s linear forwards;
 }

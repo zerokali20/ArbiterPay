@@ -1,6 +1,8 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import Navbar from '@/components/Navbar';
+import WelcomeScreen from '@/components/WelcomeScreen';
+import { ThemeProvider } from '@/components/ThemeProvider';
 
 export const metadata: Metadata = {
   title: 'ArbiterPay — Spend Control & AI Milestone Escrow',
@@ -14,26 +16,29 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark h-full bg-[#08090a]">
-      <body className="min-h-screen bg-[#08090a] text-[#ececed] flex flex-col font-sans selection:bg-[#212225] selection:text-white">
-        <Navbar />
-        <main className="flex-1">
-          {children}
-        </main>
-        <footer className="border-t border-[#212225] bg-[#08090a] py-6 text-xs text-[#81848b] font-mono">
-          <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div>
-              <span>ArbiterPay • PayPal Developer & AI Hackathon (2026)</span>
+    <html lang="en" className="dark h-full">
+      <body className="min-h-screen bg-[var(--bg)] text-[var(--text-main)] flex flex-col font-sans transition-colors duration-200">
+        <ThemeProvider>
+          <WelcomeScreen />
+          <Navbar />
+          <main className="flex-1">
+            {children}
+          </main>
+          <footer className="border-t border-slate-200 dark:border-[#212225] bg-white/50 dark:bg-[#08090a] py-6 text-xs text-slate-500 dark:text-[#81848b] font-mono transition-colors">
+            <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <div>
+                <span>ArbiterPay • PayPal Developer & AI Hackathon (2026)</span>
+              </div>
+              <div className="flex items-center gap-4 text-[11px]">
+                <span>PayPal Orders v2 & Payouts v1</span>
+                <span>•</span>
+                <span>Claude 3.5 Sonnet</span>
+                <span>•</span>
+                <span>Sandbox Only</span>
+              </div>
             </div>
-            <div className="flex items-center gap-4 text-[11px]">
-              <span>PayPal Orders v2 & Payouts v1</span>
-              <span>•</span>
-              <span>Claude 3.5 Sonnet</span>
-              <span>•</span>
-              <span>Sandbox Only</span>
-            </div>
-          </div>
-        </footer>
+          </footer>
+        </ThemeProvider>
       </body>
     </html>
   );
