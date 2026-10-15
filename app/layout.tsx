@@ -17,7 +17,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark h-full">
-      <body className="min-h-screen bg-[var(--bg)] text-[var(--text-main)] flex flex-col font-sans transition-colors duration-200">
+      <body className="min-h-screen bg-[var(--bg)] text-[var(--text-main)] flex flex-col font-sans transition-colors duration-200 antialiased">
         <ThemeProvider>
           <WelcomeScreen />
           <Navbar />

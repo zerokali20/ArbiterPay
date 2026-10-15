@@ -22,7 +22,7 @@ export default function Navbar() {
         {/* Brand */}
         <div className="flex items-center gap-6">
           <Link href="/" className="flex items-center gap-2.5">
-            <span className="font-mono text-base font-bold tracking-tight text-slate-900 dark:text-[#ececed]">
+            <span className="font-heading text-base font-bold tracking-tight text-slate-900 dark:text-[#ececed]">
               ArbiterPay
             </span>
             <span className="text-[10px] font-mono uppercase tracking-wider px-1.5 py-0.5 rounded bg-slate-100 dark:bg-[#1a1b1e] border border-slate-200 dark:border-[#2d2f33] text-slate-600 dark:text-[#81848b]">
