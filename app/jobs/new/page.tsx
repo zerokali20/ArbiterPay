@@ -80,35 +80,35 @@ export default function NewJobPage() {
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-8 font-sans">
       <div>
-        <div className="text-[11px] font-mono text-[#81848b] uppercase tracking-wider">
+        <div className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] uppercase tracking-wider">
           Job Setup
         </div>
-        <h1 className="text-2xl font-bold tracking-tight text-[#ececed] mt-1">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#ececed] mt-1">
           Create Escrow Job
         </h1>
-        <p className="text-xs font-mono text-[#81848b] mt-0.5">
+        <p className="text-xs font-mono text-slate-600 dark:text-[#81848b] mt-0.5">
           Define verifiable milestones with strict acceptance criteria. Funds sit in PayPal sandbox escrow until Arbiter approvals.
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 p-6 rounded-lg bg-[#0e0f10] border border-[#212225]">
+      <form onSubmit={handleSubmit} className="space-y-6 p-6 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] transition-colors">
         <div className="space-y-1">
-          <label className="block text-xs font-mono text-[#81848b]">Job Title</label>
+          <label className="block text-xs font-mono text-slate-600 dark:text-[#81848b]">Job Title</label>
           <input
             type="text"
             required
-            className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+            className="w-full rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] px-3 py-2 text-xs font-mono text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-blue-500 dark:focus:border-[#4cb782] transition-colors"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />
         </div>
 
         <div className="space-y-1">
-          <label className="block text-xs font-mono text-[#81848b]">Brief / Scope Description</label>
+          <label className="block text-xs font-mono text-slate-600 dark:text-[#81848b]">Brief / Scope Description</label>
           <textarea
             required
             rows={3}
-            className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+            className="w-full rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] px-3 py-2 text-xs font-mono text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-blue-500 dark:focus:border-[#4cb782] transition-colors"
             value={description}
             onChange={(e) => setDescription(e.target.value)}
           />
@@ -116,39 +116,39 @@ export default function NewJobPage() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="space-y-1">
-            <label className="block text-xs font-mono text-[#81848b]">Client Email (Sandbox Payer)</label>
+            <label className="block text-xs font-mono text-slate-600 dark:text-[#81848b]">Client Email (Sandbox Payer)</label>
             <input
               type="email"
               required
-              className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+              className="w-full rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] px-3 py-2 text-xs font-mono text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-blue-500 dark:focus:border-[#4cb782] transition-colors"
               value={clientEmail}
               onChange={(e) => setClientEmail(e.target.value)}
             />
           </div>
           <div className="space-y-1">
-            <label className="block text-xs font-mono text-[#81848b]">Freelancer PayPal Email (Receiver)</label>
+            <label className="block text-xs font-mono text-slate-600 dark:text-[#81848b]">Freelancer PayPal Email (Receiver)</label>
             <input
               type="email"
               required
-              className="w-full rounded bg-[#141517] border border-[#212225] px-3 py-2 text-xs font-mono text-[#ececed] focus:outline-none focus:border-[#4cb782]"
+              className="w-full rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] px-3 py-2 text-xs font-mono text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-blue-500 dark:focus:border-[#4cb782] transition-colors"
               value={freelancerEmail}
               onChange={(e) => setFreelancerEmail(e.target.value)}
             />
           </div>
         </div>
 
-        <div className="border-t border-[#212225] pt-6 space-y-4">
+        <div className="border-t border-slate-200 dark:border-[#212225] pt-6 space-y-4">
           <div className="flex justify-between items-center text-xs font-mono">
-            <span className="font-semibold text-[#ececed]">Milestones ({milestones.length})</span>
-            <span className="text-[#4cb782] font-bold">Total: ${totalAmount} USD</span>
+            <span className="font-semibold text-slate-900 dark:text-[#ececed]">Milestones ({milestones.length})</span>
+            <span className="text-emerald-600 dark:text-[#4cb782] font-bold">Total: ${totalAmount} USD</span>
           </div>
 
           <div className="space-y-3">
             {milestones.map((m, idx) => (
-              <div key={idx} className="p-4 rounded bg-[#141517] border border-[#212225] space-y-3 font-mono text-xs">
+              <div key={idx} className="p-4 rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] space-y-3 font-mono text-xs transition-colors">
                 <div className="flex justify-between items-center">
-                  <span className="text-[#81848b]">0{idx + 1}</span>
-                  <span className="text-[#ececed] font-bold">${m.amount} USD</span>
+                  <span className="text-slate-500 dark:text-[#81848b]">0{idx + 1}</span>
+                  <span className="text-slate-900 dark:text-[#ececed] font-bold">${m.amount} USD</span>
                 </div>
                 <input
                   type="text"
@@ -159,14 +159,14 @@ export default function NewJobPage() {
                     updated[idx].title = e.target.value;
                     setMilestones(updated);
                   }}
-                  className="w-full rounded bg-[#0e0f10] border border-[#212225] px-3 py-1.5 text-xs text-[#ececed]"
+                  className="w-full rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] px-3 py-1.5 text-xs text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-blue-500 dark:focus:border-[#4cb782] transition-colors"
                 />
                 <div className="space-y-1">
-                  <span className="text-[10px] text-[#81848b] uppercase">Criteria:</span>
-                  <ul className="space-y-0.5 text-[#9b9da3] text-[11px]">
+                  <span className="text-[10px] text-slate-500 dark:text-[#81848b] uppercase">Criteria:</span>
+                  <ul className="space-y-0.5 text-slate-600 dark:text-[#9b9da3] text-[11px]">
                     {m.criteria.map((c, cIdx) => (
                       <li key={cIdx} className="flex items-start gap-1.5">
-                        <span className="text-[#81848b]">•</span>
+                        <span className="text-slate-400 dark:text-[#81848b]">•</span>
                         <span>{c.description}</span>
                       </li>
                     ))}
@@ -180,7 +180,7 @@ export default function NewJobPage() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-2.5 rounded bg-[#ececed] text-[#08090a] font-mono text-xs font-bold hover:bg-white transition-colors disabled:opacity-50"
+          className="w-full py-2.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50"
         >
           {loading ? 'Creating Job...' : `Create Job & Fund via PayPal Sandbox ($${totalAmount})`}
         </button>

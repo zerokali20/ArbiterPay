@@ -92,13 +92,13 @@ export default function HumanReviewPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <div className="text-[11px] font-mono text-[#81848b] uppercase tracking-wider">
+          <div className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] uppercase tracking-wider">
             Human-in-the-Loop Review
           </div>
-          <h1 className="text-2xl font-bold tracking-tight text-[#ececed] mt-1">
+          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#ececed] mt-1">
             Flagged Review Queue
           </h1>
-          <p className="text-xs text-[#81848b] font-mono mt-0.5">
+          <p className="text-xs text-slate-600 dark:text-[#81848b] font-mono mt-0.5">
             Deliverables routed by policy when AI confidence &lt; 0.75 or milestone amount &ge; $500
           </p>
         </div>
@@ -106,7 +106,7 @@ export default function HumanReviewPage() {
         <div className="flex gap-2 text-xs font-mono">
           <Link
             href="/ledger"
-            className="px-3 py-1.5 rounded bg-[#141517] border border-[#212225] text-[#ececed] hover:bg-[#1a1b1e]"
+            className="px-3 py-1.5 rounded bg-slate-100 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] text-slate-800 dark:text-[#ececed] hover:bg-slate-200 dark:hover:bg-[#1a1b1e] transition-colors"
           >
             ← Audit Ledger
           </Link>
@@ -118,51 +118,51 @@ export default function HumanReviewPage() {
         {disputedCases.map((item) => (
           <div
             key={item.id}
-            className="p-6 rounded-lg bg-[#0e0f10] border border-[#212225] space-y-5"
+            className="p-6 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] space-y-5 transition-colors"
           >
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-[#212225] pb-4 gap-2">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b border-slate-200 dark:border-[#212225] pb-4 gap-2">
               <div>
-                <span className="text-[11px] font-mono text-[#d9a441] bg-[#2a2417] px-2 py-0.5 rounded border border-[#3f3521]">
+                <span className="text-[11px] font-mono text-amber-700 bg-amber-50 border border-amber-200 dark:text-[#d9a441] dark:bg-[#2a2417] px-2 py-0.5 rounded dark:border-[#3f3521]">
                   Policy Trigger: {item.reasonRouted}
                 </span>
-                <h3 className="text-base font-semibold text-[#ececed] mt-2">{item.milestoneTitle}</h3>
-                <p className="text-xs font-mono text-[#81848b]">
+                <h3 className="text-base font-semibold text-slate-900 dark:text-[#ececed] mt-2">{item.milestoneTitle}</h3>
+                <p className="text-xs font-mono text-slate-600 dark:text-[#81848b]">
                   Job: {item.jobTitle} ({item.jobId})
                 </p>
               </div>
 
               <div className="text-right">
-                <span className="text-xl font-bold font-mono text-[#ececed]">${item.amount}</span>
-                <span className="text-[11px] font-mono text-[#81848b] block">Escrow Amount</span>
+                <span className="text-xl font-bold font-mono text-slate-900 dark:text-[#ececed]">${item.amount}</span>
+                <span className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] block">Escrow Amount</span>
               </div>
             </div>
 
             {/* Evidence details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs font-mono">
-              <div className="p-4 rounded bg-[#08090a] border border-[#1a1b1e] space-y-2">
-                <span className="text-[10px] text-[#81848b] uppercase tracking-wider block">
+              <div className="p-4 rounded bg-slate-50 dark:bg-[#08090a] border border-slate-200 dark:border-[#1a1b1e] space-y-2 transition-colors">
+                <span className="text-[10px] text-slate-500 dark:text-[#81848b] uppercase tracking-wider block">
                   Deliverable Notes
                 </span>
-                <p className="text-[#ececed] font-sans text-xs">{item.deliverableSummary}</p>
-                <div className="text-[11px] text-[#81848b] pt-2 border-t border-[#1a1b1e]">
-                  Freelancer: <span className="text-[#ececed]">{item.freelancerPayPalEmail}</span>
+                <p className="text-slate-800 dark:text-[#ececed] font-sans text-xs">{item.deliverableSummary}</p>
+                <div className="text-[11px] text-slate-500 dark:text-[#81848b] pt-2 border-t border-slate-200 dark:border-[#1a1b1e]">
+                  Freelancer: <span className="text-slate-900 dark:text-[#ececed]">{item.freelancerPayPalEmail}</span>
                 </div>
               </div>
 
-              <div className="p-4 rounded bg-[#08090a] border border-[#1a1b1e] space-y-2">
-                <div className="flex justify-between items-center text-[10px] text-[#81848b] uppercase tracking-wider">
+              <div className="p-4 rounded bg-slate-50 dark:bg-[#08090a] border border-slate-200 dark:border-[#1a1b1e] space-y-2 transition-colors">
+                <div className="flex justify-between items-center text-[10px] text-slate-500 dark:text-[#81848b] uppercase tracking-wider">
                   <span>Claude Arbiter Evaluation</span>
                   <span>Confidence: {item.aiAnalysis.confidence}</span>
                 </div>
                 <div className="space-y-1.5 pt-1">
                   {item.aiAnalysis.criteria.map((c, idx) => (
                     <div key={idx} className="flex justify-between items-center text-[11px]">
-                      <span className="text-[#ececed]">{c.name}</span>
+                      <span className="text-slate-800 dark:text-[#ececed]">{c.name}</span>
                       <span
-                        className={`px-1.5 py-0.2 rounded uppercase text-[10px] ${
+                        className={`px-1.5 py-0.5 rounded uppercase text-[10px] font-semibold ${
                           c.status === 'pass'
-                            ? 'text-[#4cb782] bg-[#1a2e23]'
-                            : 'text-[#d9a441] bg-[#2a2417]'
+                            ? 'text-emerald-700 bg-emerald-100 dark:text-[#4cb782] dark:bg-[#1a2e23]'
+                            : 'text-amber-700 bg-amber-100 dark:text-[#d9a441] dark:bg-[#2a2417]'
                         }`}
                       >
                         {c.status}
@@ -177,11 +177,11 @@ export default function HumanReviewPage() {
             <div className="flex flex-col sm:flex-row justify-between items-center gap-3 pt-2 text-xs font-mono">
               <div>
                 {item.status === 'approved_paid' ? (
-                  <span className="text-[#4cb782]">✓ Approved & Released via PayPal Payouts</span>
+                  <span className="text-emerald-600 dark:text-[#4cb782]">✓ Approved & Released via PayPal Payouts</span>
                 ) : item.status === 'rejected_revision' ? (
-                  <span className="text-[#e5484d]">✕ Rejected: Fix-list issued</span>
+                  <span className="text-rose-600 dark:text-[#e5484d]">✕ Rejected: Fix-list issued</span>
                 ) : (
-                  <span className="text-[#81848b]">Awaiting administrator action</span>
+                  <span className="text-slate-500 dark:text-[#81848b]">Awaiting administrator action</span>
                 )}
               </div>
 
@@ -190,14 +190,14 @@ export default function HumanReviewPage() {
                   <button
                     onClick={() => handleReject(item)}
                     disabled={processing === item.id}
-                    className="px-3 py-1.5 rounded bg-[#1a1b1e] text-[#e5484d] border border-[#2d2f33] hover:bg-[#212225]"
+                    className="px-3 py-1.5 rounded bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 dark:bg-[#1a1b1e] dark:text-[#e5484d] dark:border-[#2d2f33] dark:hover:bg-[#212225] transition-colors"
                   >
                     Reject & Require Fix
                   </button>
                   <button
                     onClick={() => handleApprove(item)}
                     disabled={processing === item.id}
-                    className="px-3 py-1.5 rounded bg-[#ececed] text-[#08090a] font-bold hover:bg-white disabled:opacity-50"
+                    className="px-3 py-1.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-bold hover:bg-slate-800 dark:hover:bg-white disabled:opacity-50 transition-colors"
                   >
                     {processing === item.id ? 'Processing...' : 'Approve & Release Payout'}
                   </button>

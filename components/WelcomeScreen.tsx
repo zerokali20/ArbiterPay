@@ -59,7 +59,7 @@ export default function WelcomeScreen() {
       {/* Main Title Letter-by-Letter Reveal Effect */}
       <h1
         aria-label="ArbiterPay"
-        className="font-extrabold text-4xl sm:text-7xl tracking-tight text-white mb-4 flex justify-center overflow-hidden"
+        className="font-heading font-extrabold text-4xl sm:text-7xl tracking-tight text-white mb-4 flex justify-center overflow-hidden"
       >
         {title.split('').map((char, idx) => (
           <span

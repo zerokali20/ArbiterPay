@@ -10,7 +10,7 @@ export default function Home() {
           <span>Devpost PayPal & AI Hackathon • Sandbox Environment</span>
         </div>
 
-        <h1 className="text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-[#ececed] leading-tight transition-colors">
+        <h1 className="font-heading text-3xl sm:text-5xl font-extrabold tracking-tight text-slate-900 dark:text-[#ececed] leading-[1.15] transition-colors">
           Freelancers deliver. Claude evaluates. A deterministic policy decides. PayPal confirms every cent.
         </h1>
 
@@ -97,7 +97,7 @@ export default function Home() {
       {/* "Try it in three steps" Section */}
       <div className="space-y-6">
         <div>
-          <h2 className="text-xl font-bold tracking-tight text-slate-900 dark:text-[#ececed] transition-colors">
+          <h2 className="font-heading text-xl font-bold tracking-tight text-slate-900 dark:text-[#ececed] transition-colors">
             Try it in three steps
           </h2>
           <p className="text-xs text-slate-500 dark:text-[#81848b] font-mono mt-0.5 transition-colors">
@@ -113,7 +113,7 @@ export default function Home() {
                 <span className="font-bold text-slate-900 dark:text-[#ececed]">01</span>
                 <span>Orders v2</span>
               </div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-[#ececed]">
+              <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-[#ececed]">
                 Client funds the job escrow
               </h3>
               <p className="text-xs text-slate-600 dark:text-[#81848b] leading-relaxed">
@@ -135,7 +135,7 @@ export default function Home() {
                 <span className="font-bold text-slate-900 dark:text-[#ececed]">02</span>
                 <span>AI Arbiter</span>
               </div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-[#ececed]">
+              <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-[#ececed]">
                 Submit deliverable & check verdict
               </h3>
               <p className="text-xs text-slate-600 dark:text-[#81848b] leading-relaxed">
@@ -157,7 +157,7 @@ export default function Home() {
                 <span className="font-bold text-slate-900 dark:text-[#ececed]">03</span>
                 <span>AG Grid</span>
               </div>
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-[#ececed]">
+              <h3 className="font-heading text-sm font-semibold text-slate-900 dark:text-[#ececed]">
                 Inspect the audit ledger
               </h3>
               <p className="text-xs text-slate-600 dark:text-[#81848b] leading-relaxed">
