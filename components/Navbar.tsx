@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
@@ -7,13 +8,14 @@ import { useTheme } from './ThemeProvider';
 export default function Navbar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
     { label: 'Overview', href: '/' },
-    { label: 'Milestones Demo', href: '/jobs/sample-demo-job' },
     { label: 'Create Job', href: '/jobs/new' },
-    { label: 'Audit Ledger', href: '/ledger' },
+    { label: 'Live Demo', href: '/jobs/sample-demo-job' },
     { label: 'Human Review', href: '/review' },
+    { label: 'Audit Ledger', href: '/ledger' },
   ];
 
   return (
@@ -30,7 +32,7 @@ export default function Navbar() {
             </span>
           </Link>
 
-          {/* Navigation links */}
+          {/* Desktop Navigation links */}
           <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
               const active = pathname === item.href;
@@ -52,7 +54,27 @@ export default function Navbar() {
         </div>
 
         {/* Right Status Indicator & Theme Toggle */}
-        <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Mobile menu button */}
+          <button
+            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            className="md:hidden p-1.5 rounded bg-slate-100 dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-700 dark:text-[#81848b] hover:text-slate-900 dark:hover:text-[#ececed]"
+            aria-label="Toggle menu"
+          >
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              {mobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
+
           {/* Theme Mode Toggle Button */}
           <button
             onClick={toggleTheme}
@@ -122,6 +144,29 @@ export default function Navbar() {
           </Link>
         </div>
       </div>
+
+      {/* Mobile navigation drawer */}
+      {mobileMenuOpen && (
+        <div className="md:hidden border-t border-slate-200 dark:border-[#212225] bg-white dark:bg-[#08090a] px-4 py-3 space-y-1 transition-colors">
+          {navItems.map((item) => {
+            const active = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={() => setMobileMenuOpen(false)}
+                className={`block px-3 py-2 text-xs font-mono rounded transition-colors ${
+                  active
+                    ? 'bg-slate-100 dark:bg-[#1a1b1e] text-slate-900 dark:text-[#ececed] font-medium'
+                    : 'text-slate-600 dark:text-[#81848b] hover:text-slate-900 dark:hover:text-[#ececed] hover:bg-slate-50 dark:hover:bg-[#141517]'
+                }`}
+              >
+                {item.label}
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </header>
   );
 }

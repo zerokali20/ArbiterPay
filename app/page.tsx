@@ -26,16 +26,16 @@ export default function Home() {
             Try the 3-step demo →
           </Link>
           <Link
-            href="/ledger"
-            className="px-4 py-2.5 rounded bg-white text-slate-700 dark:bg-[#141517] dark:text-[#ececed] hover:bg-slate-50 dark:hover:bg-[#1a1b1e] border border-slate-200 dark:border-[#212225] text-xs font-mono transition-colors"
-          >
-            Inspect audit ledger
-          </Link>
-          <Link
             href="/review"
             className="px-4 py-2.5 rounded bg-white text-slate-700 dark:bg-[#141517] dark:text-[#ececed] hover:bg-slate-50 dark:hover:bg-[#1a1b1e] border border-slate-200 dark:border-[#212225] text-xs font-mono transition-colors"
           >
             Human review screen
+          </Link>
+          <Link
+            href="/ledger"
+            className="px-4 py-2.5 rounded bg-white text-slate-700 dark:bg-[#141517] dark:text-[#ececed] hover:bg-slate-50 dark:hover:bg-[#1a1b1e] border border-slate-200 dark:border-[#212225] text-xs font-mono transition-colors"
+          >
+            Inspect audit ledger
           </Link>
         </div>
       </div>

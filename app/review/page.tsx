@@ -105,10 +105,16 @@ export default function HumanReviewPage() {
 
         <div className="flex gap-2 text-xs font-mono">
           <Link
+            href="/jobs/sample-demo-job"
+            className="px-3 py-1.5 rounded bg-slate-100 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] text-slate-800 dark:text-[#ececed] hover:bg-slate-200 dark:hover:bg-[#1a1b1e] transition-colors"
+          >
+            ← Live Demo
+          </Link>
+          <Link
             href="/ledger"
             className="px-3 py-1.5 rounded bg-slate-100 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] text-slate-800 dark:text-[#ececed] hover:bg-slate-200 dark:hover:bg-[#1a1b1e] transition-colors"
           >
-            ← Audit Ledger
+            Audit Ledger →
           </Link>
         </div>
       </div>
