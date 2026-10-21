@@ -69,6 +69,9 @@ export default function NewJobPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create job');
 
+      // Persist so Navbar Live Demo link points to this real job
+      try { localStorage.setItem('lastCreatedJobId', data.job.id); } catch {}
+
       router.push(`/jobs/${data.job.id}`);
     } catch (err: any) {
       alert(`Error creating job: ${err.message}`);

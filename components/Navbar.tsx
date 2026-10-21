@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useTheme } from './ThemeProvider';
@@ -9,11 +9,22 @@ export default function Navbar() {
   const pathname = usePathname();
   const { theme, toggleTheme } = useTheme();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [liveDemoHref, setLiveDemoHref] = useState('/jobs/sample-demo-job');
+
+  // Pick up the last-created job ID so "Live Demo" links directly to it
+  useEffect(() => {
+    try {
+      const lastJobId = localStorage.getItem('lastCreatedJobId');
+      if (lastJobId) setLiveDemoHref(`/jobs/${lastJobId}`);
+    } catch {
+      // localStorage may be unavailable in SSR
+    }
+  }, []);
 
   const navItems = [
     { label: 'Overview', href: '/' },
     { label: 'Create Job', href: '/jobs/new' },
-    { label: 'Live Demo', href: '/jobs/sample-demo-job' },
+    { label: 'Live Demo', href: liveDemoHref },
     { label: 'Human Review', href: '/review' },
     { label: 'Audit Ledger', href: '/ledger' },
   ];
@@ -35,10 +46,10 @@ export default function Navbar() {
           {/* Desktop Navigation links */}
           <nav className="hidden md:flex items-center gap-1">
             {navItems.map((item) => {
-              const active = pathname === item.href;
+              const active = pathname === item.href || (item.label === 'Live Demo' && pathname.startsWith('/jobs/') && pathname !== '/jobs/new');
               return (
                 <Link
-                  key={item.href}
+                  key={item.label}
                   href={item.href}
                   className={`px-3 py-1.5 text-xs font-mono transition-colors rounded ${
                     active
@@ -152,7 +163,7 @@ export default function Navbar() {
             const active = pathname === item.href;
             return (
               <Link
-                key={item.href}
+                key={item.label}
                 href={item.href}
                 onClick={() => setMobileMenuOpen(false)}
                 className={`block px-3 py-2 text-xs font-mono rounded transition-colors ${

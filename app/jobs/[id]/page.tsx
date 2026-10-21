@@ -1,61 +1,97 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 
+interface MilestoneData {
+  id: string;
+  title: string;
+  description: string;
+  amount: string;
+  position: number;
+  status: string;
+  acceptanceCriteria: string[];
+}
+
+interface JobData {
+  id: string;
+  title: string;
+  description: string;
+  status: string;
+  totalAmount: string;
+  currency: string;
+  freelancerPayPalEmail: string;
+  clientEmail?: string;
+  createdAt: string;
+}
+
 export default function JobDetailPage() {
   const params = useParams();
-  const jobId = (params?.id as string) || 'job-sample';
+  const jobId = (params?.id as string) || 'sample-demo-job';
 
+  // ── Data loading state ───────────────────────────────────────────────────
+  const [jobData, setJobData] = useState<JobData | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [loadingJob, setLoadingJob] = useState(true);
+
+  // ── Escrow / submission state ────────────────────────────────────────────
   const [funding, setFunding] = useState(false);
   const [jobStatus, setJobStatus] = useState<'draft' | 'funded' | 'in_progress'>('draft');
+  const [milestonesList, setMilestonesList] = useState<MilestoneData[]>([]);
   const [submittingMilestone, setSubmittingMilestone] = useState<number | null>(null);
   const [submissionScenario, setSubmissionScenario] = useState<'pass' | 'fail' | 'ambiguous'>('pass');
   const [verdictResult, setVerdictResult] = useState<any>(null);
   const [evaluating, setEvaluating] = useState(false);
 
-  const [milestonesList, setMilestonesList] = useState([
-    {
-      id: 'ms-01',
-      title: 'Milestone 1: Core Service & Authentication',
-      amount: '50.00',
-      status: 'pending',
-      criteria: [
-        'POST /auth/register and /auth/login with bcrypt password hashing',
-        'JWT middleware protecting routes',
-        'Automated test suite with >80% code coverage',
-      ],
-    },
-    {
-      id: 'ms-02',
-      title: 'Milestone 2: Dockerization & Health Checks',
-      amount: '50.00',
-      status: 'pending',
-      criteria: [
-        'Multi-stage Dockerfile with non-root security user',
-        'GET /health endpoint reporting status and uptime',
-      ],
-    },
-    {
-      id: 'ms-03',
-      title: 'Milestone 3: CI/CD Pipeline & OpenAPI Spec',
-      amount: '50.00',
-      status: 'pending',
-      criteria: [
-        'GitHub Actions workflow running lint and tests',
-        'OpenAPI 3.0 specification file',
-      ],
-    },
-  ]);
+  // ── Fetch job on mount ───────────────────────────────────────────────────
+  useEffect(() => {
+    setLoadingJob(true);
+    setLoadError(null);
 
+    fetch(`/api/jobs/${jobId}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({ error: 'Job not found' }));
+          throw new Error(err.error || `HTTP ${res.status}`);
+        }
+        return res.json();
+      })
+      .then(({ job, milestones }) => {
+        setJobData(job);
+        // Sync job status if already funded in DB
+        if (job.status === 'funded' || job.status === 'in_progress') {
+          setJobStatus(job.status === 'funded' ? 'funded' : 'in_progress');
+        }
+        setMilestonesList(
+          milestones.map((m: any) => ({
+            id: m.id,
+            title: m.title,
+            description: m.description,
+            amount: m.amount,
+            position: m.position,
+            status: m.status || 'pending',
+            acceptanceCriteria: Array.isArray(m.acceptanceCriteria)
+              ? m.acceptanceCriteria
+              : [],
+          }))
+        );
+      })
+      .catch((err) => {
+        setLoadError(err.message);
+      })
+      .finally(() => setLoadingJob(false));
+  }, [jobId]);
+
+  // ── Fund Escrow via PayPal Sandbox ───────────────────────────────────────
   const handleFundEscrow = async () => {
+    if (!jobData) return;
     setFunding(true);
     try {
       const res = await fetch(`/api/jobs/${jobId}/fund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: '150.00' }),
+        body: JSON.stringify({ amount: jobData.totalAmount }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create PayPal order');
@@ -79,6 +115,7 @@ export default function JobDetailPage() {
     }
   };
 
+  // ── Submit Deliverable → AI Arbiter ─────────────────────────────────────
   const handleSubmitDeliverable = async (milestoneIdx: number) => {
     setEvaluating(true);
     const m = milestonesList[milestoneIdx];
@@ -87,7 +124,8 @@ export default function JobDetailPage() {
     let content = '';
 
     if (submissionScenario === 'pass') {
-      content = 'Finished auth service with bcrypt password hashing, JWT expiration check, and Jest unit tests with 92% coverage.';
+      content =
+        'Finished auth service with bcrypt password hashing, JWT expiration check, and Jest unit tests with 92% coverage.';
       filesInspected = [
         {
           path: 'src/auth.ts',
@@ -95,11 +133,13 @@ export default function JobDetailPage() {
         },
         {
           path: 'test/auth.test.ts',
-          content: 'describe("Auth", () => { test("passes", () => { expect(true).toBe(true); }); }); // Statements: 92%',
+          content:
+            'describe("Auth", () => { test("passes", () => { expect(true).toBe(true); }); }); // Statements: 92%',
         },
       ];
     } else if (submissionScenario === 'fail') {
-      content = 'Initial draft. Stored password as plain text for quick testing. Tests are not included yet.';
+      content =
+        'Initial draft. Stored password as plain text for quick testing. Tests are not included yet.';
       filesInspected = [
         {
           path: 'src/auth.ts',
@@ -127,7 +167,8 @@ export default function JobDetailPage() {
           githubRepoUrl: 'https://github.com/freelancer/auth-service',
           content,
           filesInspected,
-          freelancerPayPalEmail: 'sb-okeek53339723@personal.example.com',
+          freelancerPayPalEmail:
+            jobData?.freelancerPayPalEmail || 'sb-okeek53339723@personal.example.com',
         }),
       });
 
@@ -150,13 +191,80 @@ export default function JobDetailPage() {
     }
   };
 
+  // ── Loading skeleton ─────────────────────────────────────────────────────
+  if (loadingJob) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-6 font-sans">
+        <div className="p-6 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] animate-pulse">
+          <div className="h-3 w-24 bg-slate-200 dark:bg-[#212225] rounded mb-3" />
+          <div className="h-5 w-96 bg-slate-200 dark:bg-[#212225] rounded mb-2" />
+          <div className="h-3 w-64 bg-slate-200 dark:bg-[#212225] rounded" />
+        </div>
+        {[1, 2, 3].map((i) => (
+          <div
+            key={i}
+            className="p-5 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] animate-pulse"
+          >
+            <div className="h-4 w-48 bg-slate-200 dark:bg-[#212225] rounded mb-2" />
+            <div className="h-3 w-32 bg-slate-200 dark:bg-[#212225] rounded" />
+          </div>
+        ))}
+      </div>
+    );
+  }
+
+  // ── Error state ──────────────────────────────────────────────────────────
+  if (loadError || !jobData) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 font-sans">
+        <div className="p-8 rounded-lg bg-white dark:bg-[#0e0f10] border border-rose-200 dark:border-[#4c1e22] text-center">
+          <div className="text-rose-600 dark:text-[#e5484d] font-mono text-sm font-semibold mb-2">
+            Job Not Found
+          </div>
+          <p className="text-xs text-slate-500 dark:text-[#81848b] font-mono mb-4">
+            {loadError || `No job with ID "${jobId}" exists.`}
+          </p>
+          <Link
+            href="/jobs/new"
+            className="inline-block px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors"
+          >
+            Create a New Job →
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  const isSampleJob = jobId === 'sample-demo-job';
+  const freelancerEmail =
+    jobData.freelancerPayPalEmail || 'sb-okeek53339723@personal.example.com';
+
+  // ── Main render ──────────────────────────────────────────────────────────
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-8 font-sans">
+
+      {/* Sample-job notice */}
+      {isSampleJob && (
+        <div className="px-4 py-2.5 rounded bg-amber-50 dark:bg-[#1a1711] border border-amber-200 dark:border-[#3f3521] text-xs font-mono text-amber-700 dark:text-[#d9a441] flex items-center gap-2">
+          <span>⚡</span>
+          <span>
+            This is the <strong>pre-seeded demo job</strong>. To create your own job with custom
+            milestones, use{' '}
+            <Link href="/jobs/new" className="underline hover:no-underline">
+              Create Job
+            </Link>
+            .
+          </span>
+        </div>
+      )}
+
       {/* Top Header Card */}
       <div className="p-6 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 transition-colors">
         <div>
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] font-mono text-slate-500 dark:text-[#81848b]">JOB ID: {jobId}</span>
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-mono text-slate-500 dark:text-[#81848b]">
+              JOB ID: {jobId}
+            </span>
             <span
               className={`text-[10px] font-mono uppercase px-2 py-0.5 rounded border ${
                 jobStatus === 'funded'
@@ -167,12 +275,19 @@ export default function JobDetailPage() {
               {jobStatus}
             </span>
           </div>
-          <h1 className="text-xl font-bold text-slate-900 dark:text-[#ececed] mt-1.5">
-            Production Microservice & Automated CI Pipeline
+          <h1 className="text-xl font-bold text-slate-900 dark:text-[#ececed] mt-1.5 font-heading">
+            {jobData.title}
           </h1>
           <p className="text-xs font-mono text-slate-600 dark:text-[#81848b] mt-1">
-            Total Escrow: $150.00 USD • 3 Milestones • Receiver: sb-okeek53339723@personal.example.com
+            Total Escrow: ${jobData.totalAmount} {jobData.currency} •{' '}
+            {milestonesList.length} Milestone{milestonesList.length !== 1 ? 's' : ''} •
+            Receiver: {freelancerEmail}
           </p>
+          {jobData.description && (
+            <p className="text-xs text-slate-500 dark:text-[#9b9da3] mt-1.5 leading-relaxed max-w-xl">
+              {jobData.description}
+            </p>
+          )}
         </div>
 
         <div>
@@ -180,9 +295,11 @@ export default function JobDetailPage() {
             <button
               onClick={handleFundEscrow}
               disabled={funding}
-              className="px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50"
+              className="px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap"
             >
-              {funding ? 'Funding via PayPal...' : 'Fund $150.00 via PayPal Sandbox'}
+              {funding
+                ? 'Funding via PayPal...'
+                : `Fund $${jobData.totalAmount} via PayPal Sandbox`}
             </button>
           ) : (
             <div className="px-3 py-1.5 rounded bg-emerald-50 dark:bg-[#141517] border border-emerald-200 dark:border-[#212225] text-xs font-mono text-emerald-700 dark:text-[#4cb782]">
@@ -223,7 +340,10 @@ export default function JobDetailPage() {
             </div>
 
             <div className="text-xs text-slate-900 dark:text-[#ececed]">
-              Policy Action: <strong className="text-slate-900 dark:text-white">{verdictResult.policyDecision.action}</strong>
+              Policy Action:{' '}
+              <strong className="text-slate-900 dark:text-white">
+                {verdictResult.policyDecision.action}
+              </strong>
             </div>
           </div>
 
@@ -237,7 +357,7 @@ export default function JobDetailPage() {
               <span className="font-bold">{verdictResult.policyDecision.payoutBatchId}</span>
               <br />
               <span className="text-slate-500 dark:text-[#81848b] text-[11px]">
-                Target account credited: sb-okeek53339723@personal.example.com ($50.00 USD)
+                Target account credited: {freelancerEmail}
               </span>
             </div>
           )}
@@ -255,10 +375,10 @@ export default function JobDetailPage() {
         </div>
       )}
 
-      {/* Milestones Flow Table / Cards */}
+      {/* Milestones Flow */}
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-slate-900 dark:text-[#ececed]">
+          <h2 className="text-base font-bold text-slate-900 dark:text-[#ececed] font-heading">
             Escrow Milestones ({milestonesList.length})
           </h2>
           <span className="text-xs font-mono text-slate-500 dark:text-[#81848b]">
@@ -274,21 +394,27 @@ export default function JobDetailPage() {
             >
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div className="flex items-center gap-3">
-                  <span className="text-xs font-mono text-slate-500 dark:text-[#81848b]">0{idx + 1}</span>
+                  <span className="text-xs font-mono text-slate-500 dark:text-[#81848b]">
+                    0{idx + 1}
+                  </span>
                   <div>
-                    <h3 className="text-sm font-semibold text-slate-900 dark:text-[#ececed]">{m.title}</h3>
-                    <span className="text-xs font-mono text-slate-500 dark:text-[#81848b]">Amount: ${m.amount} USD</span>
+                    <h3 className="text-sm font-semibold text-slate-900 dark:text-[#ececed]">
+                      {m.title}
+                    </h3>
+                    <span className="text-xs font-mono text-slate-500 dark:text-[#81848b]">
+                      Amount: ${m.amount} USD
+                    </span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-3">
                   <span
                     className={`text-xs font-mono px-2 py-0.5 rounded uppercase border ${
-                      m.status === 'paid'
+                      m.status === 'paid' || m.status === 'passed'
                         ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-[#1a2e23] dark:text-[#4cb782] dark:border-[#254634]'
                         : m.status === 'failed'
                         ? 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-[#311518] dark:text-[#e5484d] dark:border-[#4c1e22]'
-                        : m.status === 'disputed'
+                        : m.status === 'disputed' || m.status === 'partial'
                         ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-[#2a2417] dark:text-[#d9a441] dark:border-[#3f3521]'
                         : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-[#141517] dark:text-[#81848b] dark:border-[#212225]'
                     }`}
@@ -296,29 +422,35 @@ export default function JobDetailPage() {
                     {m.status}
                   </span>
 
-                  {jobStatus === 'funded' && m.status !== 'paid' && (
-                    <button
-                      onClick={() => setSubmittingMilestone(idx)}
-                      className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] border border-slate-200 dark:border-[#2d2f33] text-xs font-mono text-slate-800 dark:text-[#ececed] transition-colors"
-                    >
-                      Submit deliverable →
-                    </button>
-                  )}
+                  {jobStatus === 'funded' &&
+                    m.status !== 'paid' &&
+                    m.status !== 'passed' && (
+                      <button
+                        onClick={() => setSubmittingMilestone(idx)}
+                        className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] border border-slate-200 dark:border-[#2d2f33] text-xs font-mono text-slate-800 dark:text-[#ececed] transition-colors"
+                      >
+                        Submit deliverable →
+                      </button>
+                    )}
                 </div>
               </div>
 
               {/* Criteria */}
-              <div className="text-xs space-y-1 pt-2 border-t border-slate-100 dark:border-[#1a1b1e]">
-                <span className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] uppercase">Criteria:</span>
-                <ul className="space-y-1 text-slate-600 dark:text-[#9b9da3]">
-                  {m.criteria.map((c, cIdx) => (
-                    <li key={cIdx} className="flex items-start gap-2">
-                      <span className="text-slate-400 dark:text-[#81848b]">•</span>
-                      <span>{c}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              {m.acceptanceCriteria.length > 0 && (
+                <div className="text-xs space-y-1 pt-2 border-t border-slate-100 dark:border-[#1a1b1e]">
+                  <span className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] uppercase">
+                    Criteria:
+                  </span>
+                  <ul className="space-y-1 text-slate-600 dark:text-[#9b9da3]">
+                    {m.acceptanceCriteria.map((c, cIdx) => (
+                      <li key={cIdx} className="flex items-start gap-2">
+                        <span className="text-slate-400 dark:text-[#81848b]">•</span>
+                        <span>{c}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
 
               {/* Submission drawer */}
               {submittingMilestone === idx && (
@@ -335,7 +467,9 @@ export default function JobDetailPage() {
                         checked={submissionScenario === 'pass'}
                         onChange={() => setSubmissionScenario('pass')}
                       />
-                      <span className="text-emerald-600 dark:text-[#4cb782]">Pass (bcrypt + tests)</span>
+                      <span className="text-emerald-600 dark:text-[#4cb782]">
+                        Pass (bcrypt + tests)
+                      </span>
                     </label>
 
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -345,7 +479,9 @@ export default function JobDetailPage() {
                         checked={submissionScenario === 'fail'}
                         onChange={() => setSubmissionScenario('fail')}
                       />
-                      <span className="text-rose-600 dark:text-[#e5484d]">Fail (plaintext, no tests)</span>
+                      <span className="text-rose-600 dark:text-[#e5484d]">
+                        Fail (plaintext, no tests)
+                      </span>
                     </label>
 
                     <label className="flex items-center gap-1.5 cursor-pointer">
@@ -355,7 +491,9 @@ export default function JobDetailPage() {
                         checked={submissionScenario === 'ambiguous'}
                         onChange={() => setSubmissionScenario('ambiguous')}
                       />
-                      <span className="text-amber-600 dark:text-[#d9a441]">Ambiguous (Human review)</span>
+                      <span className="text-amber-600 dark:text-[#d9a441]">
+                        Ambiguous (Human review)
+                      </span>
                     </label>
                   </div>
 
@@ -379,6 +517,16 @@ export default function JobDetailPage() {
             </div>
           ))}
         </div>
+      </div>
+
+      {/* Flow nav */}
+      <div className="flex items-center justify-between pt-2 border-t border-slate-200 dark:border-[#212225] text-xs font-mono text-slate-500 dark:text-[#81848b]">
+        <Link href="/jobs/new" className="hover:text-slate-900 dark:hover:text-[#ececed] transition-colors">
+          ← Create Another Job
+        </Link>
+        <Link href="/ledger" className="hover:text-slate-900 dark:hover:text-[#ececed] transition-colors">
+          View Audit Ledger →
+        </Link>
       </div>
     </div>
   );
