@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 
 interface MilestoneData {
@@ -28,6 +28,7 @@ interface JobData {
 
 export default function JobDetailPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
   const jobId = (params?.id as string) || 'sample-demo-job';
 
   // ── Data loading state ───────────────────────────────────────────────────
@@ -37,6 +38,11 @@ export default function JobDetailPage() {
 
   // ── Escrow / submission state ────────────────────────────────────────────
   const [funding, setFunding] = useState(false);
+  const [fundingError, setFundingError] = useState<string | null>(null);
+  const [captureId, setCaptureId] = useState<string | null>(null);
+  const [paypalOrderId, setPaypalOrderId] = useState<string | null>(null);
+  const [approvalUrl, setApprovalUrl] = useState<string | null>(null);
+
   const [jobStatus, setJobStatus] = useState<'draft' | 'funded' | 'in_progress'>('draft');
   const [milestonesList, setMilestonesList] = useState<MilestoneData[]>([]);
   const [submittingMilestone, setSubmittingMilestone] = useState<number | null>(null);
@@ -83,11 +89,50 @@ export default function JobDetailPage() {
       .finally(() => setLoadingJob(false));
   }, [jobId]);
 
+  // Handle returning from PayPal approval redirect
+  useEffect(() => {
+    const isApproved = searchParams?.get('approved');
+    const orderToken = searchParams?.get('token') || searchParams?.get('orderId');
+
+    if (isApproved === 'true' && orderToken && jobStatus === 'draft') {
+      // Complete capture automatically
+      completeCapture(orderToken);
+    }
+  }, [searchParams, jobStatus]);
+
   // ── Fund Escrow via PayPal Sandbox ───────────────────────────────────────
+  const completeCapture = async (orderId: string, simulated = false) => {
+    setFunding(true);
+    setFundingError(null);
+
+    try {
+      const captureRes = await fetch(`/api/jobs/${jobId}/fund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'capture', orderId, simulated }),
+      });
+      const captureData = await captureRes.json();
+      if (!captureRes.ok) throw new Error(captureData.error || 'Failed to capture funds');
+
+      setCaptureId(captureData.captureId || 'CAPTURED');
+      setJobStatus('funded');
+      setMilestonesList((prev) =>
+        prev.map((m, i) => (i === 0 ? { ...m, status: 'in_progress' } : m))
+      );
+    } catch (err: any) {
+      setFundingError(err.message);
+    } finally {
+      setFunding(false);
+    }
+  };
+
   const handleFundEscrow = async () => {
     if (!jobData) return;
     setFunding(true);
+    setFundingError(null);
+
     try {
+      // Step 1: Create PayPal Order v2
       const res = await fetch(`/api/jobs/${jobId}/fund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -96,21 +141,15 @@ export default function JobDetailPage() {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to create PayPal order');
 
-      const captureRes = await fetch(`/api/jobs/${jobId}/fund`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'capture', orderId: data.orderId }),
-      });
-      const captureData = await captureRes.json();
-      if (!captureRes.ok) throw new Error(captureData.error || 'Failed to capture funds');
+      setPaypalOrderId(data.orderId);
+      if (data.approvalUrl) {
+        setApprovalUrl(data.approvalUrl);
+      }
 
-      setJobStatus('funded');
-      setMilestonesList((prev) =>
-        prev.map((m, i) => (i === 0 ? { ...m, status: 'in_progress' } : m))
-      );
+      // Step 2: Capture funds into escrow
+      await completeCapture(data.orderId);
     } catch (err: any) {
-      alert(`Funding error: ${err.message}`);
-    } finally {
+      setFundingError(err.message);
       setFunding(false);
     }
   };
@@ -290,24 +329,68 @@ export default function JobDetailPage() {
           )}
         </div>
 
-        <div>
+        <div className="flex flex-col sm:items-end gap-2">
           {jobStatus === 'draft' ? (
-            <button
-              onClick={handleFundEscrow}
-              disabled={funding}
-              className="px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer"
-            >
-              {funding
-                ? 'Funding via PayPal...'
-                : `Fund $${jobData.totalAmount} via PayPal Sandbox`}
-            </button>
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleFundEscrow}
+                disabled={funding}
+                className="px-4 py-2.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+              >
+                {funding ? (
+                  <>
+                    <span className="w-3 h-3 rounded-full border-2 border-slate-400 border-t-white animate-spin"></span>
+                    <span>Processing PayPal Sandbox Escrow...</span>
+                  </>
+                ) : (
+                  <span>Fund ${jobData.totalAmount} via PayPal Sandbox</span>
+                )}
+              </button>
+
+              {approvalUrl && (
+                <div className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] text-right">
+                  Or{' '}
+                  <a
+                    href={approvalUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline text-indigo-600 dark:text-[#4cb782] font-semibold"
+                  >
+                    Open PayPal Sandbox Login
+                  </a>{' '}
+                  to approve manually
+                </div>
+              )}
+            </div>
           ) : (
-            <div className="px-3 py-1.5 rounded bg-emerald-50 dark:bg-[#141517] border border-emerald-200 dark:border-[#212225] text-xs font-mono text-emerald-700 dark:text-[#4cb782]">
-              ✓ Escrow Funded (Orders v2 Captured)
+            <div className="px-3 py-2 rounded bg-emerald-50 dark:bg-[#141517] border border-emerald-200 dark:border-[#254634] text-xs font-mono text-emerald-700 dark:text-[#4cb782] flex flex-col gap-0.5">
+              <span className="font-bold">✓ Escrow Funded (Orders v2 Captured)</span>
+              {captureId && (
+                <span className="text-[10px] text-slate-500 dark:text-[#81848b]">
+                  Capture ID: {captureId}
+                </span>
+              )}
             </div>
           )}
         </div>
       </div>
+
+      {/* Funding Error Banner */}
+      {fundingError && (
+        <div className="p-4 rounded-lg bg-rose-50 dark:bg-[#1c1214] border border-rose-200 dark:border-[#4c1e22] text-xs font-mono text-rose-700 dark:text-[#e5484d] flex justify-between items-center">
+          <div>
+            <strong>Funding Notice:</strong> {fundingError}
+          </div>
+          {paypalOrderId && (
+            <button
+              onClick={() => completeCapture(paypalOrderId, true)}
+              className="px-2.5 py-1 rounded bg-rose-600 text-white font-bold hover:bg-rose-700 transition-colors ml-3 whitespace-nowrap"
+            >
+              Complete Demo Capture
+            </button>
+          )}
+        </div>
+      )}
 
       {/* AI Verdict Inspection Banner */}
       {verdictResult && (
