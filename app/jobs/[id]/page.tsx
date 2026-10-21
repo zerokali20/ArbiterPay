@@ -11,7 +11,7 @@ interface MilestoneData {
   amount: string;
   position: number;
   status: string;
-  acceptanceCriteria: string[];
+  acceptanceCriteria: any[];
 }
 
 interface JobData {
@@ -295,7 +295,7 @@ export default function JobDetailPage() {
             <button
               onClick={handleFundEscrow}
               disabled={funding}
-              className="px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap"
+              className="px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer"
             >
               {funding
                 ? 'Funding via PayPal...'
@@ -427,7 +427,7 @@ export default function JobDetailPage() {
                     m.status !== 'passed' && (
                       <button
                         onClick={() => setSubmittingMilestone(idx)}
-                        className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] border border-slate-200 dark:border-[#2d2f33] text-xs font-mono text-slate-800 dark:text-[#ececed] transition-colors"
+                        className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] border border-slate-200 dark:border-[#2d2f33] text-xs font-mono text-slate-800 dark:text-[#ececed] transition-colors cursor-pointer"
                       >
                         Submit deliverable →
                       </button>
@@ -436,18 +436,21 @@ export default function JobDetailPage() {
               </div>
 
               {/* Criteria */}
-              {m.acceptanceCriteria.length > 0 && (
+              {m.acceptanceCriteria && m.acceptanceCriteria.length > 0 && (
                 <div className="text-xs space-y-1 pt-2 border-t border-slate-100 dark:border-[#1a1b1e]">
                   <span className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] uppercase">
                     Criteria:
                   </span>
                   <ul className="space-y-1 text-slate-600 dark:text-[#9b9da3]">
-                    {m.acceptanceCriteria.map((c, cIdx) => (
-                      <li key={cIdx} className="flex items-start gap-2">
-                        <span className="text-slate-400 dark:text-[#81848b]">•</span>
-                        <span>{c}</span>
-                      </li>
-                    ))}
+                    {m.acceptanceCriteria.map((c: any, cIdx: number) => {
+                      const text = typeof c === 'string' ? c : c?.description || JSON.stringify(c);
+                      return (
+                        <li key={cIdx} className="flex items-start gap-2">
+                          <span className="text-slate-400 dark:text-[#81848b]">•</span>
+                          <span>{text}</span>
+                        </li>
+                      );
+                    })}
                   </ul>
                 </div>
               )}
@@ -501,13 +504,13 @@ export default function JobDetailPage() {
                     <button
                       onClick={() => handleSubmitDeliverable(idx)}
                       disabled={evaluating}
-                      className="px-3 py-1.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50"
+                      className="px-3 py-1.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       {evaluating ? 'Running Arbiter...' : 'Run Arbitration'}
                     </button>
                     <button
                       onClick={() => setSubmittingMilestone(null)}
-                      className="px-3 py-1.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-[#1a1b1e] dark:text-[#81848b] dark:hover:text-white"
+                      className="px-3 py-1.5 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-[#1a1b1e] dark:text-[#81848b] dark:hover:text-white cursor-pointer"
                     >
                       Cancel
                     </button>

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { jobs, milestones, users } from '@/db/schema';
+import { getInMemoryJob, saveInMemoryJob } from '@/lib/jobsStore';
 import { eq, asc } from 'drizzle-orm';
 
 // Static demo data returned when id === 'sample-demo-job'
@@ -60,63 +61,92 @@ const SAMPLE_DEMO_JOB = {
 
 export async function GET(
   _request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> | { id: string } }
 ) {
-  const { id } = params;
+  const resolvedParams = await params;
+  const id = resolvedParams.id;
 
-  // Return static demo data for the sample job — no DB needed
+  // Return static demo data for the sample job
   if (id === 'sample-demo-job') {
     return NextResponse.json(SAMPLE_DEMO_JOB);
   }
 
+  // 1. Check in-memory store first (immediate response)
+  const memoryJob = getInMemoryJob(id);
+  if (memoryJob) {
+    return NextResponse.json({
+      job: memoryJob,
+      milestones: memoryJob.milestones,
+    });
+  }
+
+  // 2. Query PostgreSQL if not in memory
   try {
-    // Query real job from DB
     const job = await db.query.jobs.findFirst({
       where: eq(jobs.id, id),
     });
 
-    if (!job) {
-      return NextResponse.json({ error: 'Job not found' }, { status: 404 });
-    }
+    if (job) {
+      const jobMilestones = await db
+        .select()
+        .from(milestones)
+        .where(eq(milestones.jobId, id))
+        .orderBy(asc(milestones.position));
 
-    // Query milestones ordered by position
-    const jobMilestones = await db
-      .select()
-      .from(milestones)
-      .where(eq(milestones.jobId, id))
-      .orderBy(asc(milestones.position));
-
-    // Try to get freelancer email
-    let freelancerPayPalEmail = '';
-    if (job.freelancerId) {
-      try {
-        const freelancer = await db.query.users.findFirst({
-          where: eq(users.id, job.freelancerId),
-        });
-        freelancerPayPalEmail = freelancer?.paypalEmail || freelancer?.email || '';
-      } catch {
-        // Non-fatal
+      let freelancerPayPalEmail = '';
+      if (job.freelancerId) {
+        try {
+          const freelancer = await db.query.users.findFirst({
+            where: eq(users.id, job.freelancerId),
+          });
+          freelancerPayPalEmail = freelancer?.paypalEmail || freelancer?.email || '';
+        } catch {
+          // Non-fatal
+        }
       }
-    }
 
-    return NextResponse.json({
-      job: {
+      const formattedMilestones = jobMilestones.map((m) => {
+        let criteriaList: string[] = [];
+        if (Array.isArray(m.acceptanceCriteria)) {
+          criteriaList = m.acceptanceCriteria.map((c: any) =>
+            typeof c === 'string' ? c : c?.description || String(c)
+          );
+        } else if (typeof m.acceptanceCriteria === 'string') {
+          try {
+            const parsed = JSON.parse(m.acceptanceCriteria);
+            criteriaList = Array.isArray(parsed)
+              ? parsed.map((c: any) => (typeof c === 'string' ? c : c?.description || String(c)))
+              : [m.acceptanceCriteria];
+          } catch {
+            criteriaList = [m.acceptanceCriteria];
+          }
+        }
+
+        return {
+          ...m,
+          acceptanceCriteria: criteriaList,
+        };
+      });
+
+      const fullJob = {
         ...job,
-        freelancerPayPalEmail,
+        freelancerPayPalEmail:
+          freelancerPayPalEmail || 'sb-okeek53339723@personal.example.com',
         totalAmount: job.totalAmount,
-      },
-      milestones: jobMilestones.map((m) => ({
-        ...m,
-        acceptanceCriteria: Array.isArray(m.acceptanceCriteria)
-          ? m.acceptanceCriteria
-          : JSON.parse((m.acceptanceCriteria as string) || '[]'),
-      })),
-    });
+        milestones: formattedMilestones,
+      };
+
+      // Cache into memory store
+      saveInMemoryJob(fullJob as any);
+
+      return NextResponse.json({
+        job: fullJob,
+        milestones: formattedMilestones,
+      });
+    }
   } catch (error: any) {
-    console.error('GET /api/jobs/[id] error:', error.message);
-    return NextResponse.json(
-      { error: 'Failed to fetch job details' },
-      { status: 500 }
-    );
+    console.warn('GET /api/jobs/[id] DB query error:', error.message);
   }
+
+  return NextResponse.json({ error: 'Job not found' }, { status: 404 });
 }

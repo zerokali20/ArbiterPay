@@ -2,36 +2,43 @@ import { NextResponse } from 'next/server';
 import { db } from '@/db';
 import { jobs, milestones, users } from '@/db/schema';
 import { recordLedgerEvent } from '@/lib/ledger';
+import { saveInMemoryJob, getAllInMemoryJobs } from '@/lib/jobsStore';
 import { eq, desc } from 'drizzle-orm';
+import crypto from 'crypto';
 
 export async function GET() {
   try {
     const allJobs = await db.query.jobs.findMany({
       orderBy: [desc(jobs.createdAt)],
-      with: {
-        // will fetch if relations set up or fallback query
-      },
     });
 
-    return NextResponse.json({ success: true, jobs: allJobs });
+    if (allJobs && allJobs.length > 0) {
+      return NextResponse.json({ success: true, jobs: allJobs });
+    }
   } catch (error: any) {
-    // If external db connection is unreachable, return mock jobs so UI/demo never crashes
-    console.warn('DB query error, returning demo jobs:', error.message);
-    return NextResponse.json({
-      success: true,
-      jobs: [
-        {
-          id: 'demo-job-1',
-          title: 'Full-Stack Next.js & Stripe SaaS Boilerplate',
-          description: 'Build a production-ready boilerplate with authentication, Stripe subscriptions, and documentation.',
-          status: 'funded',
-          totalAmount: '450.00',
-          currency: 'USD',
-          createdAt: new Date().toISOString(),
-        },
-      ],
-    });
+    console.warn('DB query error, checking in-memory fallback:', error.message);
   }
+
+  // Fallback to in-memory store + demo job
+  const memoryJobs = getAllInMemoryJobs();
+  if (memoryJobs.length > 0) {
+    return NextResponse.json({ success: true, jobs: memoryJobs });
+  }
+
+  return NextResponse.json({
+    success: true,
+    jobs: [
+      {
+        id: 'sample-demo-job',
+        title: 'Production Microservice & Automated CI Pipeline',
+        description: 'Deliver a TypeScript microservice with Docker containerization, test coverage, and OpenAPI spec.',
+        status: 'draft',
+        totalAmount: '150.00',
+        currency: 'USD',
+        createdAt: new Date().toISOString(),
+      },
+    ],
+  });
 }
 
 export async function POST(request: Request) {
@@ -53,18 +60,78 @@ export async function POST(request: Request) {
       );
     }
 
-    // Calculate total
-    const totalAmount = inputMilestones
+    const targetClientEmail = clientEmail || 'sb-bhnlh53339270@business.example.com';
+    const targetFreelancerEmail =
+      freelancerPayPalEmail || freelancerEmail || 'sb-okeek53339723@personal.example.com';
+
+    // Normalize milestones
+    const normalizedMilestones = inputMilestones.map((m: any, idx: number) => {
+      // Normalize criteria to array of string descriptions
+      let criteriaList: string[] = [];
+      if (Array.isArray(m.criteria)) {
+        criteriaList = m.criteria.map((c: any) =>
+          typeof c === 'string' ? c : c?.description || String(c)
+        );
+      } else if (Array.isArray(m.acceptanceCriteria)) {
+        criteriaList = m.acceptanceCriteria.map((c: any) =>
+          typeof c === 'string' ? c : c?.description || String(c)
+        );
+      }
+
+      if (criteriaList.length === 0) {
+        criteriaList = ['Verify deliverable meets requirements and tests pass.'];
+      }
+
+      return {
+        title: m.title || `Milestone ${idx + 1}`,
+        description: m.description || m.title || `Milestone ${idx + 1} deliverable`,
+        amount: parseFloat(m.amount || '0').toFixed(2),
+        position: idx + 1,
+        criteria: criteriaList,
+      };
+    });
+
+    // Calculate total amount
+    const totalAmount = normalizedMilestones
       .reduce((sum: number, m: any) => sum + parseFloat(m.amount || '0'), 0)
       .toFixed(2);
 
-    let clientId: string;
-    let freelancerId: string | undefined;
+    // Generate fallback UUID-compatible IDs
+    const fallbackJobId = crypto.randomUUID();
+    const memoryMilestones = normalizedMilestones.map((m: any, i: number) => ({
+      id: crypto.randomUUID(),
+      jobId: fallbackJobId,
+      title: m.title,
+      description: m.description,
+      amount: m.amount,
+      position: i + 1,
+      status: 'pending',
+      acceptanceCriteria: m.criteria,
+    }));
 
-    // Ensure client user exists
+    const memoryJob = {
+      id: fallbackJobId,
+      title,
+      description,
+      totalAmount,
+      currency: 'USD',
+      status: 'draft',
+      clientEmail: targetClientEmail,
+      freelancerPayPalEmail: targetFreelancerEmail,
+      createdAt: new Date().toISOString(),
+      milestones: memoryMilestones,
+    };
+
+    // Store in memory first so it's guaranteed reachable immediately
+    saveInMemoryJob(memoryJob);
+
+    // Try to persist to PostgreSQL if available
     try {
+      let clientId: string;
+      let freelancerId: string | undefined;
+
       const existingClient = await db.query.users.findFirst({
-        where: eq(users.email, clientEmail || 'client@demo.com'),
+        where: eq(users.email, targetClientEmail),
       });
 
       if (existingClient) {
@@ -73,18 +140,15 @@ export async function POST(request: Request) {
         const [newClient] = await db
           .insert(users)
           .values({
-            email: clientEmail || `client-${Date.now()}@demo.com`,
+            email: targetClientEmail,
             name: 'Demo Client',
             role: 'client',
-            paypalEmail: clientEmail,
+            paypalEmail: targetClientEmail,
           })
           .returning();
         clientId = newClient.id;
       }
 
-      // Ensure freelancer exists
-      const targetFreelancerEmail =
-        freelancerPayPalEmail || freelancerEmail || 'freelancer@demo.com';
       const existingFreelancer = await db.query.users.findFirst({
         where: eq(users.email, targetFreelancerEmail),
       });
@@ -108,6 +172,7 @@ export async function POST(request: Request) {
       const [newJob] = await db
         .insert(jobs)
         .values({
+          id: fallbackJobId,
           clientId,
           freelancerId,
           title,
@@ -120,17 +185,17 @@ export async function POST(request: Request) {
 
       // Create Milestones
       const createdMilestones = [];
-      for (let i = 0; i < inputMilestones.length; i++) {
-        const m = inputMilestones[i];
+      for (const m of memoryMilestones) {
         const [createdM] = await db
           .insert(milestones)
           .values({
+            id: m.id,
             jobId: newJob.id,
             title: m.title,
             description: m.description,
-            amount: parseFloat(m.amount).toFixed(2),
-            position: i + 1,
-            acceptanceCriteria: m.criteria || [],
+            amount: m.amount,
+            position: m.position,
+            acceptanceCriteria: m.acceptanceCriteria,
             status: 'pending',
           })
           .returning();
@@ -146,40 +211,26 @@ export async function POST(request: Request) {
         details: {
           title,
           totalAmount,
-          milestonesCount: inputMilestones.length,
+          milestonesCount: createdMilestones.length,
           freelancerEmail: targetFreelancerEmail,
         },
       });
 
       return NextResponse.json({
         success: true,
-        job: newJob,
+        job: {
+          ...newJob,
+          freelancerPayPalEmail: targetFreelancerEmail,
+        },
         milestones: createdMilestones,
       });
     } catch (dbErr: any) {
-      console.warn('DB write failed, falling back to simulated memory job:', dbErr.message);
-      const mockJobId = `job-${Date.now()}`;
+      console.warn('DB write bypassed, using memory store job:', dbErr.message);
+      // Return memory job
       return NextResponse.json({
         success: true,
-        job: {
-          id: mockJobId,
-          title,
-          description,
-          totalAmount,
-          status: 'draft',
-          currency: 'USD',
-          createdAt: new Date().toISOString(),
-        },
-        milestones: inputMilestones.map((m: any, i: number) => ({
-          id: `ms-${mockJobId}-${i + 1}`,
-          jobId: mockJobId,
-          title: m.title,
-          description: m.description,
-          amount: parseFloat(m.amount).toFixed(2),
-          position: i + 1,
-          acceptanceCriteria: m.criteria || [],
-          status: 'pending',
-        })),
+        job: memoryJob,
+        milestones: memoryMilestones,
       });
     }
   } catch (error: any) {
