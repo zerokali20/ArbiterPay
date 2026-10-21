@@ -40,7 +40,6 @@ export default function JobDetailPage() {
   const [funding, setFunding] = useState(false);
   const [fundingError, setFundingError] = useState<string | null>(null);
   const [captureId, setCaptureId] = useState<string | null>(null);
-  const [paypalOrderId, setPaypalOrderId] = useState<string | null>(null);
   const [approvalUrl, setApprovalUrl] = useState<string | null>(null);
 
   const [jobStatus, setJobStatus] = useState<'draft' | 'funded' | 'in_progress'>('draft');
@@ -57,15 +56,18 @@ export default function JobDetailPage() {
 
     fetch(`/api/jobs/${jobId}`)
       .then(async (res) => {
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({ error: 'Job not found' }));
-          throw new Error(err.error || `HTTP ${res.status}`);
+        const text = await res.text();
+        let json: any = {};
+        try {
+          json = JSON.parse(text);
+        } catch {
+          throw new Error(`Failed to load job (HTTP ${res.status}): ${text.slice(0, 100)}`);
         }
-        return res.json();
+        if (!res.ok) throw new Error(json.error || `HTTP ${res.status}`);
+        return json;
       })
       .then(({ job, milestones }) => {
         setJobData(job);
-        // Sync job status if already funded in DB
         if (job.status === 'funded' || job.status === 'in_progress') {
           setJobStatus(job.status === 'funded' ? 'funded' : 'in_progress');
         }
@@ -95,13 +97,12 @@ export default function JobDetailPage() {
     const orderToken = searchParams?.get('token') || searchParams?.get('orderId');
 
     if (isApproved === 'true' && orderToken && jobStatus === 'draft') {
-      // Complete capture automatically
       completeCapture(orderToken);
     }
   }, [searchParams, jobStatus]);
 
   // ── Fund Escrow via PayPal Sandbox ───────────────────────────────────────
-  const completeCapture = async (orderId: string, simulated = false) => {
+  const completeCapture = async (orderId: string) => {
     setFunding(true);
     setFundingError(null);
 
@@ -109,9 +110,15 @@ export default function JobDetailPage() {
       const captureRes = await fetch(`/api/jobs/${jobId}/fund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'capture', orderId, simulated }),
+        body: JSON.stringify({ action: 'capture', orderId }),
       });
-      const captureData = await captureRes.json();
+      const text = await captureRes.text();
+      let captureData: any = {};
+      try {
+        captureData = JSON.parse(text);
+      } catch {
+        throw new Error(`Server returned error (${captureRes.status}): ${text.slice(0, 100)}`);
+      }
       if (!captureRes.ok) throw new Error(captureData.error || 'Failed to capture funds');
 
       setCaptureId(captureData.captureId || 'CAPTURED');
@@ -132,24 +139,37 @@ export default function JobDetailPage() {
     setFundingError(null);
 
     try {
-      // Step 1: Create PayPal Order v2
+      // One-click atomic fund and capture in sandbox
       const res = await fetch(`/api/jobs/${jobId}/fund`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount: jobData.totalAmount }),
+        body: JSON.stringify({
+          action: 'fund_and_capture',
+          amount: jobData.totalAmount,
+        }),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to create PayPal order');
 
-      setPaypalOrderId(data.orderId);
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Server response (${res.status}): ${text.slice(0, 100)}`);
+      }
+
+      if (!res.ok) throw new Error(data.error || 'Failed to fund escrow');
+
+      setCaptureId(data.captureId || 'CAPTURED');
       if (data.approvalUrl) {
         setApprovalUrl(data.approvalUrl);
       }
-
-      // Step 2: Capture funds into escrow
-      await completeCapture(data.orderId);
+      setJobStatus('funded');
+      setMilestonesList((prev) =>
+        prev.map((m, i) => (i === 0 ? { ...m, status: 'in_progress' } : m))
+      );
     } catch (err: any) {
       setFundingError(err.message);
+    } finally {
       setFunding(false);
     }
   };
@@ -211,7 +231,14 @@ export default function JobDetailPage() {
         }),
       });
 
-      const data = await res.json();
+      const text = await res.text();
+      let data: any = {};
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`Submission server error (${res.status}): ${text.slice(0, 100)}`);
+      }
+
       if (!res.ok) throw new Error(data.error || 'Submission failed');
 
       setVerdictResult(data);
@@ -335,12 +362,12 @@ export default function JobDetailPage() {
               <button
                 onClick={handleFundEscrow}
                 disabled={funding}
-                className="px-4 py-2.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm flex items-center justify-center gap-1.5"
+                className="px-4 py-2.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white transition-colors disabled:opacity-50 whitespace-nowrap cursor-pointer shadow-sm flex items-center justify-center gap-2"
               >
                 {funding ? (
                   <>
-                    <span className="w-3 h-3 rounded-full border-2 border-slate-400 border-t-white animate-spin"></span>
-                    <span>Processing PayPal Sandbox Escrow...</span>
+                    <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-white animate-spin"></span>
+                    <span>Funding PayPal Sandbox Escrow...</span>
                   </>
                 ) : (
                   <span>Fund ${jobData.totalAmount} via PayPal Sandbox</span>
@@ -363,7 +390,7 @@ export default function JobDetailPage() {
               )}
             </div>
           ) : (
-            <div className="px-3 py-2 rounded bg-emerald-50 dark:bg-[#141517] border border-emerald-200 dark:border-[#254634] text-xs font-mono text-emerald-700 dark:text-[#4cb782] flex flex-col gap-0.5">
+            <div className="px-3.5 py-2 rounded bg-emerald-50 dark:bg-[#141517] border border-emerald-200 dark:border-[#254634] text-xs font-mono text-emerald-700 dark:text-[#4cb782] flex flex-col gap-0.5">
               <span className="font-bold">✓ Escrow Funded (Orders v2 Captured)</span>
               {captureId && (
                 <span className="text-[10px] text-slate-500 dark:text-[#81848b]">
@@ -379,16 +406,14 @@ export default function JobDetailPage() {
       {fundingError && (
         <div className="p-4 rounded-lg bg-rose-50 dark:bg-[#1c1214] border border-rose-200 dark:border-[#4c1e22] text-xs font-mono text-rose-700 dark:text-[#e5484d] flex justify-between items-center">
           <div>
-            <strong>Funding Notice:</strong> {fundingError}
+            <strong>Notice:</strong> {fundingError}
           </div>
-          {paypalOrderId && (
-            <button
-              onClick={() => completeCapture(paypalOrderId, true)}
-              className="px-2.5 py-1 rounded bg-rose-600 text-white font-bold hover:bg-rose-700 transition-colors ml-3 whitespace-nowrap"
-            >
-              Complete Demo Capture
-            </button>
-          )}
+          <button
+            onClick={handleFundEscrow}
+            className="px-2.5 py-1 rounded bg-rose-600 text-white font-bold hover:bg-rose-700 transition-colors ml-3 whitespace-nowrap"
+          >
+            Retry Funding
+          </button>
         </div>
       )}
 
