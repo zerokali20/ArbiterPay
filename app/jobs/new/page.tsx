@@ -106,9 +106,27 @@ export default function NewJobPage() {
   const isBudgetBalanced = Math.abs(budgetDifference) < 0.01;
 
   // ── Preset Template Switcher ──────────────────────────────────────────────
-  const applyTaskPreset = (presetType: 'python_scraper' | 'single_task' | 'microservice') => {
+  const applyTaskPreset = (presetType: 'empty' | 'python_scraper' | 'single_task' | 'microservice') => {
     setActiveTemplateId(presetType);
-    if (presetType === 'python_scraper') {
+    if (presetType === 'empty') {
+      setTitle('');
+      setDescription('');
+      setTotalBudget('100.00');
+      setSplitStrategy('equal');
+      setMilestones([
+        {
+          id: `ms-${Date.now()}-1`,
+          title: 'Milestone 1: Deliverable Requirements',
+          description: '',
+          amount: '100.00',
+          criteria: [
+            { id: `c-${Date.now()}-1`, description: '' },
+          ],
+        },
+      ]);
+      setSaveSuccessMsg('Blank template loaded');
+      setTimeout(() => setSaveSuccessMsg(null), 2500);
+    } else if (presetType === 'python_scraper') {
       setTitle('Python Web Scraper: URL → CSV of H1 Tags');
       setDescription(
         'Write a Python script that takes a URL as input, extracts all H1 tags found on the page, and outputs them into a CSV file (h1_tags.csv). Must include error handling for invalid URLs.'
@@ -582,6 +600,21 @@ export default function NewJobPage() {
             <span>⚡</span>
             <span>Templates:</span>
           </div>
+
+          {/* Preset 0: Empty / Blank Template */}
+          <button
+            type="button"
+            onClick={() => applyTaskPreset('empty')}
+            className={`px-3 py-1.5 rounded border text-xs whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              activeTemplateId === 'empty'
+                ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
+                : 'bg-slate-50 dark:bg-[#141517] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:border-slate-400 dark:hover:border-[#373a6e]'
+            }`}
+          >
+            <span>📄</span>
+            <span>Blank Template</span>
+            <span className="text-[10px] opacity-70">(Empty)</span>
+          </button>
 
           {/* Preset 1: Python Scraper */}
           <button
