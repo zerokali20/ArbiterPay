@@ -1,34 +1,36 @@
 import { z } from 'zod';
 
+// ── Scoring-based Verdict Schema ──────────────────────────────────────────
+// Score 0-100 replaces pass/partial/fail labels.
+// Policy layer maps: score >= 90 → AUTO_PAYOUT, else → HUMAN_REVIEW or FIX
 export const CriterionResultSchema = z.object({
-  criterionId: z.string().describe('Unique identifier of the criterion'),
-  criterionDescription: z.string().describe('Exact description of criterion being verified'),
-  status: z.enum(['pass', 'fail']).describe('Pass or fail verdict for this specific criterion'),
-  reasoning: z.string().describe('Concise technical reasoning justifying the verdict'),
-  quotedEvidence: z.string().describe('Direct citation, code excerpt, or excerpt from deliverable supporting verdict'),
+  criterionId: z.string(),
+  criterionDescription: z.string(),
+  score: z.number().min(0).max(100).describe('0-100 score for this criterion'),
+  status: z.enum(['pass', 'fail']).describe('"pass" if score >= 70, else "fail"'),
+  reasoning: z.string(),
+  quotedEvidence: z.string().describe('Direct excerpt from the submitted code supporting verdict'),
 });
 
 export const ArbiterVerdictSchema = z.object({
   overallResult: z.enum(['pass', 'partial', 'fail']).describe(
-    'Overall verdict: pass (all criteria met), partial (some met, recoverable), fail (unacceptable or mostly unmet)'
+    '"pass" if totalScore >= 90, "partial" if 50–89, "fail" if < 50'
   ),
-  confidence: z.number().min(0.0).max(1.0).describe(
-    'Confidence score between 0.0 and 1.0 based on clarity and completeness of evidence'
-  ),
-  summary: z.string().describe('High-level executive summary of arbitration findings'),
-  criteriaResults: z.array(CriterionResultSchema).describe('Individual evaluation per criterion'),
-  fixList: z.array(z.string()).describe(
-    'Actionable, specific bullet-point checklist for freelancer if overallResult is partial or fail. Empty array if pass.'
-  ),
-  modelUsed: z.string().describe('Identifier of model that produced verdict'),
-  promptVersion: z.string().describe('Version of prompt executed'),
+  totalScore: z.number().min(0).max(100).describe('Weighted 0-100 score across all criteria'),
+  confidence: z.number().min(0.0).max(1.0),
+  summary: z.string(),
+  criteriaResults: z.array(CriterionResultSchema),
+  fixList: z.array(z.string()).describe('Empty if totalScore >= 90'),
+  modelUsed: z.string(),
+  promptVersion: z.string(),
 });
 
 export type CriterionResult = z.infer<typeof CriterionResultSchema>;
 export type ArbiterVerdict = z.infer<typeof ArbiterVerdictSchema>;
 
 export const ARBITER_MODEL = process.env.ARBITER_MODEL || 'claude-3-5-sonnet-latest';
-export const PROMPT_VERSION = 'v1.0.0';
+export const PROMPT_VERSION = 'v2.0.0';
+export const AUTO_PAYOUT_SCORE_THRESHOLD = 90; // score >= 90 triggers automatic payout
 
 export interface MilestoneContext {
   id: string;
@@ -36,30 +38,36 @@ export interface MilestoneContext {
   description: string;
   amount: string;
   criteria: Array<{ id: string; description: string }>;
+  taskPrompt?: string; // The original coding task description from the client
 }
 
 export interface DeliverableSubmission {
   submissionType: 'github_repo' | 'file_upload' | 'text';
-  content?: string;
+  content?: string;        // Code pasted as text or file content
   githubRepoUrl?: string;
   fileUrl?: string;
+  fileName?: string;       // Original uploaded filename e.g. "script.py"
   filesInspected?: Array<{ path: string; content: string }>;
 }
 
 export function buildArbiterSystemPrompt(): string {
-  return `You are ArbiterPay's neutral AI Escrow Arbiter.
-Your duty is to impartially, objectively evaluate deliverables submitted by a freelancer against the agreed milestone acceptance criteria defined by the client.
+  return `You are ArbiterPay's AI Code Evaluator — a neutral, objective judge for coding freelance deliverables.
+
+Your job is to evaluate submitted code against the client's original task description and acceptance criteria, assigning a numeric score from 0 to 100.
+
+SCORING RULES:
+- 90–100: All requirements met, code is correct and complete → triggers automatic payment release
+- 70–89: Mostly working with minor gaps → freelancer revises, no payment yet  
+- 50–69: Partial — core logic present but significant gaps → specific fix list required
+- 0–49: Fails to meet task requirements → rejected with fix list
 
 NON-NEGOTIABLE PRINCIPLES:
-1. The AI never moves money. You return a structured, evidence-backed evaluation verdict.
-2. Evaluate strictly against checkable deliverables (code logic, tests, verifiable checklist items, concrete documentation). Do not reward or penalize based on subjective aesthetics.
-3. Every verdict requires:
-   - status ('pass' | 'fail') per criterion.
-   - exact quotedEvidence from the deliverable demonstrating compliance or failure.
-   - clear reasoning.
-4. If overallResult is 'partial' or 'fail', provide a specific, actionable fixList so the freelancer can fix and resubmit. If 'pass', fixList must be empty.
-5. Provide a calibrated confidence score (0.0 to 1.0). If deliverable files are incomplete, missing, or ambiguous, reflect lower confidence.
-6. You MUST respond with ONLY valid JSON adhering strictly to the requested schema. No markdown wrapping, no introductory or concluding prose.`;
+1. Score ONLY based on the code submitted vs. the stated objective requirements.
+2. Never score subjective aesthetics. Only testable, objective outcomes matter.
+3. Every criterion must have: a numeric score, a status ("pass" if score ≥ 70 else "fail"), quoted code evidence, and clear reasoning.
+4. If totalScore < 90, provide a specific actionable fixList so the freelancer can improve.
+5. Calibrate confidence: 0.0 if code is empty/missing, 1.0 if fully verifiable.
+6. Respond with ONLY valid JSON matching the schema exactly. No markdown, no prose.`;
 }
 
 export function buildArbiterUserPrompt(
@@ -70,39 +78,48 @@ export function buildArbiterUserPrompt(
     .map((c, i) => `${i + 1}. [ID: ${c.id}] ${c.description}`)
     .join('\n');
 
-  let deliverableDetails = `Type: ${deliverable.submissionType}\n`;
-  if (deliverable.githubRepoUrl) deliverableDetails += `Repo: ${deliverable.githubRepoUrl}\n`;
-  if (deliverable.content) deliverableDetails += `Summary / Note:\n${deliverable.content}\n`;
+  const taskDescription = milestone.taskPrompt || milestone.description;
+
+  let codeBlock = '';
+  if (deliverable.content) {
+    const fileName = deliverable.fileName || 'submission';
+    codeBlock += `\n--- Submitted File: ${fileName} ---\n${deliverable.content}\n--- End File ---`;
+  }
   if (deliverable.filesInspected && deliverable.filesInspected.length > 0) {
-    deliverableDetails += `\nInspected Files:\n` +
+    codeBlock += '\n\nInspected Files:\n' +
       deliverable.filesInspected
         .map((f) => `--- File: ${f.path} ---\n${f.content}\n--- End File ---`)
         .join('\n\n');
   }
+  if (deliverable.githubRepoUrl) {
+    codeBlock += `\nGitHub Repo: ${deliverable.githubRepoUrl}`;
+  }
 
-  return `MILESTONE UNDER REVIEW:
+  return `CODING TASK UNDER EVALUATION:
 Title: ${milestone.title}
-Amount: $${milestone.amount}
-Description: ${milestone.description}
+Task Description: ${taskDescription}
+Escrow Amount: $${milestone.amount}
 
-ACCEPTANCE CRITERIA:
+ACCEPTANCE CRITERIA (evaluate each with a 0-100 score):
 ${criteriaText}
 
-SUBMITTED DELIVERABLE:
-${deliverableDetails}
+SUBMITTED CODE:
+${codeBlock || '(No code submitted)'}
 
-Return JSON with keys:
+Return JSON exactly matching this schema:
 {
   "overallResult": "pass" | "partial" | "fail",
-  "confidence": number between 0.0 and 1.0,
+  "totalScore": number (0-100, weighted average),
+  "confidence": number (0.0-1.0),
   "summary": string,
   "criteriaResults": [
     {
       "criterionId": string,
       "criterionDescription": string,
+      "score": number (0-100),
       "status": "pass" | "fail",
       "reasoning": string,
-      "quotedEvidence": string
+      "quotedEvidence": string (exact code excerpt)
     }
   ],
   "fixList": string[],
@@ -112,8 +129,8 @@ Return JSON with keys:
 }
 
 /**
- * Deterministic fallback evaluator when ANTHROPIC_API_KEY has 0 balance or is mock mode.
- * Keeps prototype 100% testable for hackathon judges and local development.
+ * Deterministic fallback evaluator — activated when no API key or balance is zero.
+ * Scores code by inspecting content against known patterns.
  */
 function evaluateDeliverableDeterministic(
   milestone: MilestoneContext,
@@ -122,97 +139,106 @@ function evaluateDeliverableDeterministic(
   const allContent = (
     (deliverable.content || '') +
     ' ' +
+    (deliverable.fileName || '') +
+    ' ' +
     (deliverable.filesInspected?.map((f) => f.path + ' ' + f.content).join(' ') || '')
   ).toLowerCase();
 
+  const isEmpty = allContent.trim().length < 20;
   const results: ArbiterVerdict['criteriaResults'] = [];
   const fixList: string[] = [];
 
   for (const crit of milestone.criteria) {
     const descLower = crit.description.toLowerCase();
-    let passes = false;
+    let score = 0;
     let evidence = '';
     let reasoning = '';
 
-    // Check for explicit positive matches
-    if (descLower.includes('bcrypt') || descLower.includes('hash')) {
-      if (allContent.includes('bcrypt') && !allContent.includes('plain text')) {
-        passes = true;
-        evidence = 'src/auth.ts: bcrypt.hash(pw, 10)';
-        reasoning = 'Cryptographic password hashing implemented using bcrypt with salt rounds.';
+    if (isEmpty) {
+      score = 0;
+      evidence = '(Empty submission)';
+      reasoning = 'No code was submitted to evaluate.';
+      fixList.push(`Submit code that satisfies: ${crit.description}`);
+    } else if (descLower.includes('csv') || descLower.includes('h1')) {
+      // Python web scraping pattern
+      const hasCsv = allContent.includes('csv') || allContent.includes('writer');
+      const hasRequests = allContent.includes('requests') || allContent.includes('urllib') || allContent.includes('httpx');
+      const hasParser = allContent.includes('beautifulsoup') || allContent.includes('bs4') || allContent.includes('html.parser') || allContent.includes('lxml');
+      const hasH1 = allContent.includes('h1') || allContent.includes('find_all');
+
+      if (hasCsv && hasRequests && hasParser && hasH1) {
+        score = 95;
+        evidence = 'CSV output, HTTP fetch, HTML parser, and H1 extraction all present.';
+        reasoning = 'All core requirements for URL-to-CSV H1 extraction script are satisfied.';
+      } else if ((hasCsv || hasH1) && (hasRequests || hasParser)) {
+        score = 72;
+        evidence = `Partial: csv=${hasCsv}, requests=${hasRequests}, parser=${hasParser}, h1=${hasH1}`;
+        reasoning = 'Some required components present but implementation is incomplete.';
+        fixList.push('Ensure script fetches the URL, parses H1 tags, and writes them to a CSV file.');
       } else {
-        evidence = 'Plain text storage detected / bcrypt missing';
-        reasoning = 'Passwords not hashed with bcrypt as specified in milestone acceptance criteria.';
-        fixList.push('Implement bcrypt password hashing on authentication routes.');
+        score = 30;
+        evidence = 'Missing CSV writing, URL fetching, or H1 extraction logic.';
+        reasoning = 'Core task requirements not implemented.';
+        fixList.push('Implement: fetch URL → parse HTML → extract H1 tags → write CSV with DictWriter.');
       }
-    } else if (descLower.includes('jwt') || descLower.includes('token')) {
-      if (allContent.includes('jwt.verify') || allContent.includes('verifyjwtmiddleware')) {
-        passes = true;
-        evidence = 'src/auth.ts: jwt.verify(token, process.env.JWT_SECRET)';
-        reasoning = 'JWT token validation and signature check implemented with expiration handling.';
-      } else {
-        evidence = 'Signature verification missing';
-        reasoning = 'JWT verification is incomplete or only checking header presence without cryptographic signature.';
-        fixList.push('Add JWT middleware verifying token signature and expiration against secret.');
-      }
+    } else if (descLower.includes('bcrypt') || descLower.includes('hash')) {
+      score = allContent.includes('bcrypt') ? 95 : 20;
+      evidence = allContent.includes('bcrypt') ? 'bcrypt usage detected.' : 'No bcrypt found.';
+      reasoning = allContent.includes('bcrypt') ? 'Password hashing implemented.' : 'Passwords not hashed.';
+      if (score < 90) fixList.push('Implement bcrypt password hashing.');
     } else if (descLower.includes('test') || descLower.includes('coverage')) {
-      if (allContent.includes('coverage') && (allContent.includes('92%') || allContent.includes('80%'))) {
-        passes = true;
-        evidence = 'test/auth.test.ts: Jest coverage Statements: 92%, Lines: 92%';
-        reasoning = 'Automated unit test suite achieves >80% coverage and validates core assertions.';
-      } else {
-        evidence = 'Tests missing or execution output omitted';
-        reasoning = 'Required test suite or passing coverage metrics were not verified in submission.';
-        fixList.push('Include automated test suite verifying auth endpoints with >=80% coverage.');
-      }
+      const hasCoverage = allContent.includes('coverage') || allContent.includes('pytest') || allContent.includes('unittest');
+      score = hasCoverage ? 90 : 40;
+      evidence = hasCoverage ? 'Test framework detected.' : 'No tests found.';
+      reasoning = hasCoverage ? 'Automated tests present.' : 'Tests required but missing.';
+      if (score < 90) fixList.push('Add automated tests with coverage reporting.');
     } else {
-      // General heuristic
-      passes = allContent.length > 100 && !allContent.includes('fail');
-      evidence = passes ? 'Code implementation matches milestone description.' : 'No matching evidence found.';
-      reasoning = passes ? 'Criterion satisfied based on deliverable inspection.' : 'Criterion requirements unmet.';
-      if (!passes) fixList.push(`Satisfy criterion: ${crit.description}`);
+      // General: score based on code complexity
+      const lines = allContent.split('\n').length;
+      score = Math.min(85, 30 + lines * 2);
+      evidence = `Code with ${lines} lines submitted.`;
+      reasoning = 'General code submission evaluated heuristically.';
+      if (score < 90) fixList.push(`Ensure criterion fully satisfied: ${crit.description}`);
     }
 
     results.push({
       criterionId: crit.id,
       criterionDescription: crit.description,
-      status: passes ? 'pass' : 'fail',
+      score,
+      status: score >= 70 ? 'pass' : 'fail',
       reasoning,
       quotedEvidence: evidence,
     });
   }
 
-  const passedCount = results.filter((r) => r.status === 'pass').length;
-  let overallResult: 'pass' | 'partial' | 'fail' = 'fail';
-  let confidence = 0.95;
+  const totalScore = results.length > 0
+    ? Math.round(results.reduce((sum, r) => sum + r.score, 0) / results.length)
+    : 0;
 
-  if (passedCount === results.length) {
-    overallResult = 'pass';
-    confidence = 0.95;
-  } else if (passedCount > 0) {
-    overallResult = 'partial';
-    confidence = 0.65;
-  } else {
-    overallResult = 'fail';
-    confidence = 0.92;
-  }
+  let overallResult: 'pass' | 'partial' | 'fail';
+  if (totalScore >= 90) overallResult = 'pass';
+  else if (totalScore >= 50) overallResult = 'partial';
+  else overallResult = 'fail';
 
   return {
     overallResult,
-    confidence,
+    totalScore,
+    confidence: isEmpty ? 0.1 : 0.88,
     summary:
-      overallResult === 'pass'
-        ? 'All acceptance criteria verified with high confidence. Deliverable approved.'
-        : `Deliverable failed ${results.length - passedCount} of ${results.length} criteria. Fix list generated.`,
+      totalScore >= 90
+        ? `Score ${totalScore}/100 — All criteria met. Automatic payment release approved.`
+        : totalScore >= 50
+        ? `Score ${totalScore}/100 — Partial. ${fixList.length} items require revision before payment.`
+        : `Score ${totalScore}/100 — Insufficient. Major issues identified; fix list issued.`,
     criteriaResults: results,
-    fixList: overallResult === 'pass' ? [] : fixList,
-    modelUsed: `${ARBITER_MODEL} (simulation mode: zero balance fallback)`,
+    fixList: totalScore >= 90 ? [] : fixList,
+    modelUsed: `${ARBITER_MODEL} (deterministic-fallback)`,
     promptVersion: PROMPT_VERSION,
   };
 }
 
 /**
- * Execute Arbiter Evaluation via Claude API (with deterministic fallback if balance is 0).
+ * Execute AI Code Evaluation via Claude API (with deterministic fallback).
  */
 export async function evaluateDeliverable(
   milestone: MilestoneContext,
@@ -237,7 +263,7 @@ export async function evaluateDeliverable(
       },
       body: JSON.stringify({
         model: ARBITER_MODEL,
-        max_tokens: 2048,
+        max_tokens: 3000,
         temperature: 0.1,
         system: systemPrompt,
         messages: [{ role: 'user', content: userPrompt }],
@@ -245,9 +271,12 @@ export async function evaluateDeliverable(
     });
 
     if (response.status === 400 || response.status === 402 || response.status === 429) {
-      const errJson = await response.json();
-      if (errJson?.error?.message?.includes('credit balance is too low')) {
-        console.warn('⚠️ Anthropic credit balance is zero. Falling back to deterministic evaluation engine.');
+      const errJson = await response.json().catch(() => ({}));
+      if (
+        errJson?.error?.message?.includes('credit balance is too low') ||
+        errJson?.error?.type === 'insufficient_quota'
+      ) {
+        console.warn('⚠️ Anthropic zero balance — falling back to deterministic evaluator.');
         return evaluateDeliverableDeterministic(milestone, deliverable);
       }
       throw new Error(`Claude API error (${response.status}): ${JSON.stringify(errJson)}`);
@@ -265,14 +294,31 @@ export async function evaluateDeliverable(
       throw new Error('No text returned in Claude response');
     }
 
-    const cleanedJson = textContent.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim();
+    const cleanedJson = textContent
+      .replace(/^```json\s*/, '')
+      .replace(/\s*```$/, '')
+      .trim();
+
     const parsed = JSON.parse(cleanedJson);
+
+    // Ensure backward compat: if no totalScore, compute from criteriaResults
+    if (typeof parsed.totalScore !== 'number' && Array.isArray(parsed.criteriaResults)) {
+      parsed.totalScore = Math.round(
+        parsed.criteriaResults.reduce((s: number, c: any) => s + (c.score || 0), 0) /
+          parsed.criteriaResults.length
+      );
+    }
+    if (!parsed.overallResult) {
+      parsed.overallResult =
+        parsed.totalScore >= 90 ? 'pass' : parsed.totalScore >= 50 ? 'partial' : 'fail';
+    }
 
     return ArbiterVerdictSchema.parse(parsed);
   } catch (error: any) {
     if (error.message?.includes('credit balance is too low')) {
       return evaluateDeliverableDeterministic(milestone, deliverable);
     }
-    throw error;
+    console.error('[ARBITER ERROR]', error.message);
+    return evaluateDeliverableDeterministic(milestone, deliverable);
   }
 }

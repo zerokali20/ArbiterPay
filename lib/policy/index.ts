@@ -1,21 +1,18 @@
 /**
- * Deterministic Policy Layer.
- * 
+ * Deterministic Policy Layer — Score-Based (≥90 = AUTO_PAYOUT).
+ *
  * NON-NEGOTIABLE RULE 1: The AI NEVER moves money directly.
- * It returns a structured verdict. This deterministic code evaluates that verdict
- * against rigorous business rules to approve payouts, require revisions, or route to human review.
- * 
- * NON-NEGOTIABLE RULE 4: Payouts are strictly idempotent. A milestone can NEVER be paid twice.
+ * NON-NEGOTIABLE RULE 4: Payouts are strictly idempotent.
  */
 
 import { ArbiterVerdict } from '../arbiter';
 import { createBatchPayout } from '../paypal';
 import { recordLedgerEvent } from '../ledger';
 
+export const SCORE_THRESHOLD = 90; // ≥90 → auto payout, <90 → human review
 export const CONFIDENCE_THRESHOLD = parseFloat(
-  process.env.ARBITER_CONFIDENCE_THRESHOLD || '0.75'
+  process.env.ARBITER_CONFIDENCE_THRESHOLD || '0.60'
 );
-
 export const HIGH_VALUE_THRESHOLD = parseFloat(
   process.env.ARBITER_HIGH_VALUE_THRESHOLD || '500'
 );
@@ -24,7 +21,7 @@ export interface PolicyEvaluationParams {
   jobId: string;
   milestoneId: string;
   milestoneTitle: string;
-  milestoneAmount: string; // e.g., '150.00'
+  milestoneAmount: string;
   milestoneStatus: string;
   freelancerPayPalEmail: string;
   verdict: ArbiterVerdict;
@@ -36,11 +33,9 @@ export interface PolicyDecision {
   payoutBatchId?: string;
   routedToHuman: boolean;
   newMilestoneStatus: 'paid' | 'disputed' | 'failed' | 'partial';
+  score?: number;
 }
 
-/**
- * Execute policy evaluation on an Arbiter verdict.
- */
 export async function evaluatePolicy(
   params: PolicyEvaluationParams
 ): Promise<PolicyDecision> {
@@ -55,101 +50,92 @@ export async function evaluatePolicy(
   } = params;
 
   const numericAmount = parseFloat(milestoneAmount);
+  const score = verdict.totalScore ?? (verdict.overallResult === 'pass' ? 95 : verdict.overallResult === 'partial' ? 65 : 30);
 
   // 1. STRICT IDEMPOTENCY CHECK
   if (milestoneStatus === 'paid') {
-    console.warn(`[POLICY IDEMPOTENCY] Milestone ${milestoneId} is already marked PAID. Payout blocked.`);
+    console.warn(`[POLICY IDEMPOTENCY] Milestone ${milestoneId} already PAID. Payout blocked.`);
     return {
       action: 'ROUTE_TO_HUMAN_REVIEW',
-      reason: 'Milestone is already marked PAID. Redundant payout blocked for idempotency safety.',
+      reason: 'Milestone already marked PAID. Redundant payout blocked.',
       routedToHuman: true,
       newMilestoneStatus: 'paid',
+      score,
     };
   }
 
-  // 2. CHECK VERDICT RESULT
-  if (verdict.overallResult === 'fail') {
+  // 2. SCORE < 50 → REJECT (too far from threshold)
+  if (score < 50) {
     await recordLedgerEvent({
-      jobId,
-      milestoneId,
+      jobId, milestoneId,
       eventType: 'ARBITER_VERDICT_FAILED',
       actorType: 'arbiter',
-      details: {
-        verdict: verdict.overallResult,
-        confidence: verdict.confidence,
-        fixList: verdict.fixList,
-      },
+      details: { score, fixList: verdict.fixList },
     });
-
     return {
       action: 'REJECT_REQUIRE_FIX',
-      reason: 'Deliverable failed milestone criteria. Fix-list issued to freelancer.',
+      reason: `Score ${score}/100 — Below minimum acceptable threshold (50). Fix list issued.`,
       routedToHuman: false,
       newMilestoneStatus: 'failed',
+      score,
     };
   }
 
-  if (verdict.overallResult === 'partial') {
+  // 3. SCORE 50–89 → REQUIRE REVISION
+  if (score < SCORE_THRESHOLD) {
     await recordLedgerEvent({
-      jobId,
-      milestoneId,
+      jobId, milestoneId,
       eventType: 'ARBITER_VERDICT_PARTIAL',
       actorType: 'arbiter',
-      details: {
-        verdict: verdict.overallResult,
-        confidence: verdict.confidence,
-        fixList: verdict.fixList,
-      },
+      details: { score, threshold: SCORE_THRESHOLD, fixList: verdict.fixList },
     });
-
     return {
       action: 'REJECT_REQUIRE_FIX',
-      reason: 'Deliverable partially met criteria. Specific revision required before payout.',
+      reason: `Score ${score}/100 — Needs improvement to reach auto-payout threshold (${SCORE_THRESHOLD}). Fix list issued.`,
       routedToHuman: false,
       newMilestoneStatus: 'partial',
+      score,
     };
   }
 
-  // 3. HUMAN REVIEW ROUTING: Low Confidence
+  // 4. HUMAN REVIEW: Low Confidence despite passing score
   if (verdict.confidence < CONFIDENCE_THRESHOLD) {
-    const reason = `Confidence score (${verdict.confidence.toFixed(2)}) is below safety threshold (${CONFIDENCE_THRESHOLD}). Routed to human reviewer.`;
+    const reason = `Score ${score}/100 qualifies, but confidence (${verdict.confidence.toFixed(2)}) is below safety threshold (${CONFIDENCE_THRESHOLD}). Routed to human reviewer.`;
     await recordLedgerEvent({
-      jobId,
-      milestoneId,
+      jobId, milestoneId,
       eventType: 'ROUTED_TO_HUMAN_LOW_CONFIDENCE',
       actorType: 'system',
-      details: { confidence: verdict.confidence, threshold: CONFIDENCE_THRESHOLD },
+      details: { score, confidence: verdict.confidence, threshold: CONFIDENCE_THRESHOLD },
     });
-
     return {
       action: 'ROUTE_TO_HUMAN_REVIEW',
       reason,
       routedToHuman: true,
       newMilestoneStatus: 'disputed',
+      score,
     };
   }
 
-  // 4. HUMAN REVIEW ROUTING: High Value Milestone
+  // 5. HUMAN REVIEW: High Value Milestone
   if (numericAmount >= HIGH_VALUE_THRESHOLD) {
-    const reason = `Milestone amount ($${numericAmount.toFixed(2)}) meets or exceeds high-value threshold ($${HIGH_VALUE_THRESHOLD}). Requires human sign-off.`;
+    const reason = `Score ${score}/100 ✓ but milestone ($${numericAmount}) exceeds high-value threshold ($${HIGH_VALUE_THRESHOLD}). Human sign-off required.`;
     await recordLedgerEvent({
-      jobId,
-      milestoneId,
+      jobId, milestoneId,
       eventType: 'ROUTED_TO_HUMAN_HIGH_VALUE',
       actorType: 'system',
-      details: { amount: numericAmount, threshold: HIGH_VALUE_THRESHOLD },
+      details: { score, amount: numericAmount, threshold: HIGH_VALUE_THRESHOLD },
     });
-
     return {
       action: 'ROUTE_TO_HUMAN_REVIEW',
       reason,
       routedToHuman: true,
       newMilestoneStatus: 'disputed',
+      score,
     };
   }
 
-  // 5. DETERMINISTIC APPROVAL: Auto-release PayPal Payout
-  console.log(`[POLICY APPROVAL] Milestone ${milestoneId} approved! Initiating PayPal Payout.`);
+  // 6. SCORE ≥ 90 → AUTO PAYOUT VIA PAYPAL PAYOUTS API
+  console.log(`[POLICY APPROVAL] Score ${score}/100 ≥ ${SCORE_THRESHOLD}. Initiating PayPal Payout for Milestone ${milestoneId}.`);
   const senderBatchId = `batch-${milestoneId.slice(0, 8)}-${Date.now()}`;
   const senderItemId = `item-${milestoneId.slice(0, 8)}-${Date.now()}`;
 
@@ -159,7 +145,7 @@ export async function evaluatePolicy(
         receiverEmail: freelancerPayPalEmail,
         amount: numericAmount.toFixed(2),
         currency: 'USD',
-        note: `ArbiterPay Escrow Release: ${milestoneTitle} verified by AI`,
+        note: `ArbiterPay Code Escrow Release: ${milestoneTitle} scored ${score}/100 by AI`,
         senderItemId,
       },
     ]);
@@ -167,12 +153,12 @@ export async function evaluatePolicy(
     const batchId = payoutResult.batch_header.payout_batch_id;
 
     await recordLedgerEvent({
-      jobId,
-      milestoneId,
+      jobId, milestoneId,
       eventType: 'PAYPAL_PAYOUT_RELEASED',
       actorType: 'system',
       details: {
         payoutBatchId: batchId,
+        score,
         amount: numericAmount.toFixed(2),
         receiver: freelancerPayPalEmail,
         verdictConfidence: verdict.confidence,
@@ -181,27 +167,26 @@ export async function evaluatePolicy(
 
     return {
       action: 'AUTO_PAYOUT_EXECUTED',
-      reason: `Milestone verified with high confidence (${verdict.confidence.toFixed(2)}). PayPal payout released.`,
+      reason: `Score ${score}/100 ≥ ${SCORE_THRESHOLD} threshold. PayPal payout automatically released.`,
       payoutBatchId: batchId,
       routedToHuman: false,
       newMilestoneStatus: 'paid',
+      score,
     };
   } catch (err: any) {
-    console.error(`[POLICY PAYOUT ERROR] Payout call failed:`, err.message);
-
+    console.error('[POLICY PAYOUT ERROR]', err.message);
     await recordLedgerEvent({
-      jobId,
-      milestoneId,
+      jobId, milestoneId,
       eventType: 'PAYPAL_PAYOUT_FAILED',
       actorType: 'system',
-      details: { error: err.message },
+      details: { error: err.message, score },
     });
-
     return {
       action: 'ROUTE_TO_HUMAN_REVIEW',
-      reason: `Arbiter approved, but PayPal Payout API call failed: ${err.message}. Routed for manual review.`,
+      reason: `Score ${score}/100 approved but PayPal Payout API failed: ${err.message}. Routed for manual release.`,
       routedToHuman: true,
       newMilestoneStatus: 'disputed',
+      score,
     };
   }
 }

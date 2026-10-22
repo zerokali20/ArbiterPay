@@ -8,9 +8,9 @@ import { eq, asc } from 'drizzle-orm';
 const SAMPLE_DEMO_JOB = {
   job: {
     id: 'sample-demo-job',
-    title: 'Production Microservice & Automated CI Pipeline',
+    title: 'Python Web Scraper: URL → CSV of H1 Tags',
     description:
-      'Deliver a TypeScript microservice with Docker containerization, comprehensive test coverage, and CI/CD documentation.',
+      'Write a Python script that accepts a URL as a command-line argument, fetches the page HTML, extracts all H1 tags, and outputs them as a CSV file (h1_tags.csv). Script must handle invalid URLs and network errors gracefully.',
     status: 'draft',
     totalAmount: '150.00',
     currency: 'USD',
@@ -21,39 +21,33 @@ const SAMPLE_DEMO_JOB = {
   milestones: [
     {
       id: 'ms-01',
-      title: 'Milestone 1: Core Service & Authentication',
-      description: 'JWT authentication, registration, bcrypt hashing with tests.',
-      amount: '50.00',
+      title: 'Milestone 1: Core Scraper — URL Input & H1 Extraction',
+      description:
+        'Script accepts a URL via sys.argv, fetches HTML with requests, parses it with BeautifulSoup, and extracts all H1 tags.',
+      amount: '75.00',
       position: 1,
       status: 'pending',
       acceptanceCriteria: [
-        'POST /auth/register and /auth/login with bcrypt password hashing',
-        'JWT middleware protecting routes',
-        'Automated test suite with >80% code coverage',
+        'Script accepts a URL as a command-line argument (sys.argv or argparse)',
+        'Script fetches the URL using the requests library (or httpx/urllib)',
+        'Script parses the HTML and extracts all H1 tags using BeautifulSoup (bs4)',
+        'Script outputs a valid CSV file (h1_tags.csv) with DictWriter or csv.writer',
+        'Script handles errors gracefully: invalid URLs, HTTP errors, and network failures',
       ],
     },
     {
       id: 'ms-02',
-      title: 'Milestone 2: Dockerization & Health Checks',
-      description: 'Multi-stage Dockerfile and health endpoints.',
-      amount: '50.00',
+      title: 'Milestone 2: Output Quality & Edge Cases',
+      description:
+        'CSV output is correctly formatted, empty H1 lists are handled, and the script exits with a non-zero code on fatal errors.',
+      amount: '75.00',
       position: 2,
       status: 'pending',
       acceptanceCriteria: [
-        'Multi-stage Dockerfile with non-root security user',
-        'GET /health endpoint reporting status and uptime',
-      ],
-    },
-    {
-      id: 'ms-03',
-      title: 'Milestone 3: CI/CD Pipeline & OpenAPI Spec',
-      description: 'GitHub Actions workflow and OpenAPI documentation.',
-      amount: '50.00',
-      position: 3,
-      status: 'pending',
-      acceptanceCriteria: [
-        'GitHub Actions workflow running lint and tests',
-        'OpenAPI 3.0 specification file',
+        'CSV header row present (e.g., "index,h1_text" or similar)',
+        'Handles pages with zero H1 tags without crashing',
+        'Script exits with sys.exit(1) on fatal errors and prints a clear message to stderr',
+        'requirements.txt or inline comments listing dependencies (requests, beautifulsoup4)',
       ],
     },
   ],

@@ -34,15 +34,20 @@ export default function LedgerPage() {
         headerName: 'Timestamp',
         sortable: true,
         filter: true,
-        width: 180,
+        width: 175,
         cellClass: 'font-mono text-xs text-slate-600 dark:text-[#81848b]',
         valueFormatter: (params) => {
           if (!params.value) return '';
-          return new Date(params.value).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-            second: '2-digit',
-          }) + ' (' + new Date(params.value).toLocaleDateString() + ')';
+          return (
+            new Date(params.value).toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              second: '2-digit',
+            }) +
+            ' (' +
+            new Date(params.value).toLocaleDateString() +
+            ')'
+          );
         },
       },
       {
@@ -73,6 +78,34 @@ export default function LedgerPage() {
         filter: true,
         width: 100,
         cellClass: 'font-mono text-xs text-slate-600 dark:text-[#81848b] uppercase',
+      },
+      {
+        headerName: 'Score',
+        sortable: true,
+        filter: true,
+        width: 95,
+        valueGetter: (params: any) => {
+          const d = params.data?.details;
+          if (!d) return null;
+          return typeof d.score === 'number' ? d.score : null;
+        },
+        cellRenderer: (params: any) => {
+          const score = params.value;
+          if (score === null || score === undefined) {
+            return <span className="text-slate-400 dark:text-[#81848b] font-mono text-xs">—</span>;
+          }
+          const color =
+            score >= 90
+              ? 'text-emerald-600 dark:text-[#4cb782]'
+              : score >= 50
+              ? 'text-amber-600 dark:text-[#d9a441]'
+              : 'text-rose-600 dark:text-[#e5484d]';
+          return (
+            <span className={`font-mono text-xs font-bold ${color}`}>
+              {score}/100
+            </span>
+          );
+        },
       },
       {
         field: 'jobId',
@@ -106,7 +139,7 @@ export default function LedgerPage() {
             Immutable AG Grid Audit Trail
           </h1>
           <p className="text-xs text-slate-600 dark:text-[#81848b] font-mono mt-0.5">
-            Cryptographic append-only log recording every AI verdict, confidence rating, and PayPal transaction
+            Append-only log — every AI verdict, 0–100 score, confidence rating, and PayPal transaction
           </p>
         </div>
 
@@ -166,6 +199,21 @@ export default function LedgerPage() {
                   <span className="text-[10px] text-slate-500 dark:text-[#81848b] uppercase block">Actor</span>
                   <p className="text-slate-600 dark:text-[#81848b] uppercase mt-0.5">{selectedEvent.actorType}</p>
                 </div>
+
+                {selectedEvent.details?.score !== undefined && (
+                  <div>
+                    <span className="text-[10px] text-slate-500 dark:text-[#81848b] uppercase block">AI Score</span>
+                    <p className={`font-bold mt-0.5 text-sm ${
+                      selectedEvent.details.score >= 90
+                        ? 'text-emerald-600 dark:text-[#4cb782]'
+                        : selectedEvent.details.score >= 50
+                        ? 'text-amber-600 dark:text-[#d9a441]'
+                        : 'text-rose-600 dark:text-[#e5484d]'
+                    }`}>
+                      {selectedEvent.details.score}/100
+                    </p>
+                  </div>
+                )}
 
                 <div>
                   <span className="text-[10px] text-slate-500 dark:text-[#81848b] uppercase block">Payload / Evidence</span>
