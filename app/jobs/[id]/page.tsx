@@ -26,7 +26,7 @@ interface JobData {
   createdAt: string;
 }
 
-export default function JobDetailPage() {
+function JobDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const jobId = (params?.id as string) || 'sample-demo-job';
@@ -606,5 +606,27 @@ def extract_h1_to_csv(url):
         <Link href="/ledger" className="hover:text-slate-900 dark:hover:text-[#ececed] transition-colors">View Audit Ledger →</Link>
       </div>
     </div>
+  );
+}
+
+export default function JobDetailPage() {
+  return (
+    <React.Suspense
+      fallback={
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 space-y-6 font-sans">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="p-5 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] animate-pulse"
+            >
+              <div className="h-4 w-48 bg-slate-200 dark:bg-[#212225] rounded mb-2" />
+              <div className="h-3 w-32 bg-slate-200 dark:bg-[#212225] rounded" />
+            </div>
+          ))}
+        </div>
+      }
+    >
+      <JobDetailContent />
+    </React.Suspense>
   );
 }
