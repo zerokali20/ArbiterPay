@@ -53,9 +53,9 @@ export async function POST(request: Request) {
       milestones: inputMilestones,
     } = body;
 
-    if (!title || !description || !inputMilestones || inputMilestones.length < 2) {
+    if (!title || !description || !inputMilestones || inputMilestones.length < 1) {
       return NextResponse.json(
-        { error: 'A job must have a title, description, and at least 2 milestones.' },
+        { error: 'A job must have a title, description, and at least 1 milestone.' },
         { status: 400 }
       );
     }
