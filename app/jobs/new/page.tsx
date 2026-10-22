@@ -296,7 +296,6 @@ export default function NewJobPage() {
     if (splitStrategy === 'equal' || splitStrategy === 'front_loaded' || splitStrategy === 'back_loaded') {
       setMilestones(applySplitStrategyToMilestones(splitStrategy, newMilestonesList));
     } else {
-      // In custom mode, split equally to keep budget 100% balanced
       setMilestones(applySplitStrategyToMilestones('equal', newMilestonesList));
       setSplitStrategy('equal');
     }
@@ -331,7 +330,6 @@ export default function NewJobPage() {
     if (splitStrategy === 'equal' || splitStrategy === 'front_loaded' || splitStrategy === 'back_loaded') {
       setMilestones(applySplitStrategyToMilestones(splitStrategy, renumbered));
     } else {
-      // In custom mode, automatically distribute difference to the last remaining milestone
       const count = renumbered.length;
       const sumWithoutLast = renumbered
         .slice(0, count - 1)
@@ -341,52 +339,63 @@ export default function NewJobPage() {
     }
   };
 
-  // ── Criteria Management ──────────────────────────────────────────────────
-  const handleAddCriterion = (milestoneId: string) => {
-    const text = (criterionDrafts[milestoneId] || '').trim();
-    if (!text) return;
-
-    setMilestones((prev) =>
-      prev.map((m) => {
-        if (m.id !== milestoneId) return m;
-        const newCritId = `crit-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`;
-        return {
-          ...m,
-          criteria: [...m.criteria, { id: newCritId, description: text }],
-        };
-      })
-    );
-
-    setCriterionDrafts((prev) => ({ ...prev, [milestoneId]: '' }));
+  // ── Criteria Management (Rock-Solid Index-Based Operations) ───────────────
+  
+  // 1. Edit an existing criterion's text directly
+  const handleCriterionChange = (milestoneIdx: number, critIdx: number, newText: string) => {
+    setMilestones((prev) => {
+      const copy = [...prev];
+      const targetM = { ...copy[milestoneIdx] };
+      const updatedCriteria = [...targetM.criteria];
+      updatedCriteria[critIdx] = {
+        ...updatedCriteria[critIdx],
+        description: newText,
+      };
+      targetM.criteria = updatedCriteria;
+      copy[milestoneIdx] = targetM;
+      return copy;
+    });
   };
 
-  const handleRemoveCriterion = (milestoneId: string, critId: string) => {
-    setMilestones((prev) =>
-      prev.map((m) => {
-        if (m.id !== milestoneId) return m;
-        if (m.criteria.length <= 1) {
-          alert('Each milestone must contain at least 1 verifiable acceptance criterion.');
-          return m;
-        }
-        return {
-          ...m,
-          criteria: m.criteria.filter((c) => c.id !== critId),
-        };
-      })
-    );
+  // 2. Add a criterion (via typed text, suggestion chip, or empty default)
+  const handleAddCriterion = (milestoneIdx: number, customText?: string) => {
+    const targetM = milestones[milestoneIdx];
+    if (!targetM) return;
+
+    const draftText = customText || (criterionDrafts[targetM.id] || '').trim();
+    const textToAdd =
+      draftText ||
+      `Criterion ${targetM.criteria.length + 1}: Implement and verify objective requirement.`;
+
+    const newCritId = `crit-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+
+    setMilestones((prev) => {
+      const copy = [...prev];
+      const m = { ...copy[milestoneIdx] };
+      m.criteria = [...m.criteria, { id: newCritId, description: textToAdd }];
+      copy[milestoneIdx] = m;
+      return copy;
+    });
+
+    // Clear input draft
+    if (criterionDrafts[targetM.id]) {
+      setCriterionDrafts((prev) => ({ ...prev, [targetM.id]: '' }));
+    }
   };
 
-  const handleCriterionPreset = (milestoneId: string, presetText: string) => {
-    setMilestones((prev) =>
-      prev.map((m) => {
-        if (m.id !== milestoneId) return m;
-        const newCritId = `crit-${Date.now().toString().slice(-4)}-${Math.random().toString(36).slice(2, 5)}`;
-        return {
-          ...m,
-          criteria: [...m.criteria, { id: newCritId, description: presetText }],
-        };
-      })
-    );
+  // 3. Remove a criterion by exact index
+  const handleRemoveCriterion = (milestoneIdx: number, critIdx: number) => {
+    setMilestones((prev) => {
+      const copy = [...prev];
+      const targetM = { ...copy[milestoneIdx] };
+      if (targetM.criteria.length <= 1) {
+        alert('Each milestone must contain at least 1 acceptance criterion. You can edit this criterion instead of deleting it.');
+        return prev;
+      }
+      targetM.criteria = targetM.criteria.filter((_, i) => i !== critIdx);
+      copy[milestoneIdx] = targetM;
+      return copy;
+    });
   };
 
   // ── Submit Job ───────────────────────────────────────────────────────────
@@ -405,6 +414,11 @@ export default function NewJobPage() {
         }
         if (!m.criteria || m.criteria.length === 0) {
           throw new Error(`Milestone "${m.title}" must have at least 1 acceptance criterion.`);
+        }
+        for (const c of m.criteria) {
+          if (!c.description || !c.description.trim()) {
+            throw new Error(`A criterion in "${m.title}" cannot be blank.`);
+          }
         }
       }
 
@@ -461,7 +475,7 @@ export default function NewJobPage() {
             Create Escrow Job
           </h1>
           <p className="text-xs font-mono text-slate-600 dark:text-[#81848b] mt-0.5">
-            Add or remove milestones freely (1–6), define strict criteria, and allocate money with automatic balancing.
+            Manage milestones (1–6) &amp; acceptance criteria with real-time budget auto-balancing.
           </p>
         </div>
 
@@ -471,21 +485,21 @@ export default function NewJobPage() {
           <button
             type="button"
             onClick={() => applyTaskPreset('python_scraper')}
-            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors"
+            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors cursor-pointer"
           >
             🐍 Python Scraper (2)
           </button>
           <button
             type="button"
             onClick={() => applyTaskPreset('single_task')}
-            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors"
+            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors cursor-pointer"
           >
             ⚡ Single Task (1)
           </button>
           <button
             type="button"
             onClick={() => applyTaskPreset('microservice')}
-            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors"
+            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors cursor-pointer"
           >
             📦 Microservice (3)
           </button>
@@ -557,7 +571,7 @@ export default function NewJobPage() {
             <div>
               <div className="flex items-center gap-2">
                 <span className="text-xs font-mono font-bold text-slate-900 dark:text-[#ececed] uppercase tracking-wider">
-                  Escrow Budget & Split Strategy
+                  Escrow Budget &amp; Split Strategy
                 </span>
                 <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-indigo-50 text-indigo-700 border border-indigo-200 dark:bg-[#1f2038] dark:text-[#9fa6fc] dark:border-[#373a6e]">
                   Auto-Calculator
@@ -576,7 +590,7 @@ export default function NewJobPage() {
                   key={preset}
                   type="button"
                   onClick={() => handlePresetBudget(preset)}
-                  className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors ${
+                  className={`px-2 py-0.5 rounded text-[10px] font-mono border transition-colors cursor-pointer ${
                     parseFloat(totalBudget) === preset
                       ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
                       : 'bg-white dark:bg-[#0e0f10] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:border-slate-400'
@@ -617,7 +631,7 @@ export default function NewJobPage() {
                 <button
                   type="button"
                   onClick={() => handleStrategyChange('equal')}
-                  className={`px-2 py-1.5 rounded text-[11px] font-mono border text-center transition-colors ${
+                  className={`px-2 py-1.5 rounded text-[11px] font-mono border text-center transition-colors cursor-pointer ${
                     splitStrategy === 'equal'
                       ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
                       : 'bg-white dark:bg-[#0e0f10] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:bg-slate-100 dark:hover:bg-[#1a1b1e]'
@@ -628,7 +642,7 @@ export default function NewJobPage() {
                 <button
                   type="button"
                   onClick={() => handleStrategyChange('front_loaded')}
-                  className={`px-2 py-1.5 rounded text-[11px] font-mono border text-center transition-colors ${
+                  className={`px-2 py-1.5 rounded text-[11px] font-mono border text-center transition-colors cursor-pointer ${
                     splitStrategy === 'front_loaded'
                       ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
                       : 'bg-white dark:bg-[#0e0f10] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:bg-slate-100 dark:hover:bg-[#1a1b1e]'
@@ -639,7 +653,7 @@ export default function NewJobPage() {
                 <button
                   type="button"
                   onClick={() => handleStrategyChange('back_loaded')}
-                  className={`px-2 py-1.5 rounded text-[11px] font-mono border text-center transition-colors ${
+                  className={`px-2 py-1.5 rounded text-[11px] font-mono border text-center transition-colors cursor-pointer ${
                     splitStrategy === 'back_loaded'
                       ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
                       : 'bg-white dark:bg-[#0e0f10] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:bg-slate-100 dark:hover:bg-[#1a1b1e]'
@@ -775,14 +789,14 @@ export default function NewJobPage() {
                             ? 'An escrow job requires at least 1 milestone'
                             : `Remove Milestone ${idx + 1}`
                         }
-                        className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-medium transition-colors ${
                           milestones.length <= 1
                             ? 'opacity-30 cursor-not-allowed text-slate-400 border border-transparent'
                             : 'text-rose-600 hover:text-white hover:bg-rose-600 dark:text-[#e5484d] dark:hover:bg-[#e5484d] dark:hover:text-white border border-rose-200 dark:border-[#4c1e22] cursor-pointer'
                         }`}
                       >
                         <span className="text-sm leading-none font-bold">✕</span>
-                        <span>Remove</span>
+                        <span>Remove Milestone</span>
                       </button>
                     </div>
                   </div>
@@ -824,78 +838,89 @@ export default function NewJobPage() {
                     </div>
                   </div>
 
-                  {/* Criteria Checklist */}
-                  <div className="space-y-2 pt-2 border-t border-slate-200 dark:border-[#212225]">
-                    <div className="flex justify-between items-center">
-                      <span className="text-[11px] text-slate-500 dark:text-[#81848b] uppercase">
+                  {/* ── Criteria Checklist ─────────────────────────────────── */}
+                  <div className="space-y-2.5 pt-3 border-t border-slate-200 dark:border-[#212225]">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+                      <span className="text-[11px] font-bold text-slate-700 dark:text-[#ececed] uppercase tracking-wider">
                         Acceptance Criteria ({m.criteria.length})
                       </span>
-                      {/* Criteria Quick Suggestions */}
-                      <div className="hidden sm:flex items-center gap-1.5">
+
+                      {/* Criteria Quick Suggestions — ALWAYS VISIBLE on all viewports */}
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <span className="text-[10px] text-slate-400">Quick add:</span>
                         <button
                           type="button"
-                          onClick={() => handleCriterionPreset(m.id, 'Output matches expected CSV formatting and schema.')}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-600 dark:text-[#81848b] hover:text-indigo-600 dark:hover:text-white"
+                          onClick={() => handleAddCriterion(idx, 'Outputs clean, valid CSV format with header row.')}
+                          className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-700 dark:text-[#81848b] hover:text-indigo-600 dark:hover:text-white hover:border-indigo-300 dark:hover:border-[#4cb782] transition-colors cursor-pointer"
                         >
                           + CSV Format
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleCriterionPreset(m.id, 'Handles invalid inputs and network errors gracefully.')}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-600 dark:text-[#81848b] hover:text-indigo-600 dark:hover:text-white"
+                          onClick={() => handleAddCriterion(idx, 'Handles invalid inputs, network timeouts, and non-200 HTTP codes.')}
+                          className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-700 dark:text-[#81848b] hover:text-indigo-600 dark:hover:text-white hover:border-indigo-300 dark:hover:border-[#4cb782] transition-colors cursor-pointer"
                         >
                           + Error Handling
                         </button>
                         <button
                           type="button"
-                          onClick={() => handleCriterionPreset(m.id, 'Automated unit tests with >80% coverage.')}
-                          className="text-[10px] px-1.5 py-0.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-600 dark:text-[#81848b] hover:text-indigo-600 dark:hover:text-white"
+                          onClick={() => handleAddCriterion(idx, 'Automated unit tests passing with >80% code coverage.')}
+                          className="text-[10px] px-2 py-0.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-700 dark:text-[#81848b] hover:text-indigo-600 dark:hover:text-white hover:border-indigo-300 dark:hover:border-[#4cb782] transition-colors cursor-pointer"
                         >
                           + Unit Tests
                         </button>
                       </div>
                     </div>
 
-                    {/* Criteria items list */}
-                    <div className="space-y-1.5">
+                    {/* Criteria items list — with inline editing and rock-solid delete */}
+                    <div className="space-y-2">
                       {m.criteria.map((c, cIdx) => (
                         <div
                           key={c.id || cIdx}
-                          className="flex items-center justify-between gap-2 p-2.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-700 dark:text-[#9b9da3] text-[11px] group"
+                          className="flex items-center gap-2 p-1.5 sm:p-2 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] text-slate-700 dark:text-[#9b9da3] text-xs transition-colors"
                         >
-                          <div className="flex items-start gap-2 flex-1">
-                            <span className="text-slate-400 dark:text-[#81848b] font-bold">•</span>
-                            <span className="leading-snug">{c.description}</span>
-                          </div>
-                          
-                          {/* Remove criterion button */}
+                          <span className="text-slate-400 dark:text-[#81848b] font-mono text-[11px] font-bold pl-1 shrink-0 select-none">
+                            {cIdx + 1}.
+                          </span>
+
+                          {/* Inline editable criterion input */}
+                          <input
+                            type="text"
+                            required
+                            value={c.description}
+                            onChange={(e) => handleCriterionChange(idx, cIdx, e.target.value)}
+                            className="flex-1 bg-transparent text-xs font-mono text-slate-900 dark:text-[#ececed] focus:outline-none focus:underline"
+                            placeholder="Type verifiable criterion description..."
+                          />
+
+                          {/* Delete criterion button */}
                           <button
                             type="button"
-                            onClick={() => handleRemoveCriterion(m.id, c.id)}
+                            onClick={() => handleRemoveCriterion(idx, cIdx)}
                             disabled={m.criteria.length <= 1}
-                            className={`p-1 rounded text-xs transition-colors ${
+                            className={`px-2 py-1 rounded text-[11px] font-mono transition-colors flex items-center gap-1 shrink-0 ${
                               m.criteria.length <= 1
-                                ? 'opacity-20 cursor-not-allowed text-slate-400'
-                                : 'text-slate-400 hover:text-rose-600 dark:hover:text-[#e5484d] hover:bg-rose-50 dark:hover:bg-[#211617] cursor-pointer'
+                                ? 'opacity-25 cursor-not-allowed text-slate-400'
+                                : 'text-rose-600 hover:text-white hover:bg-rose-600 dark:text-[#e5484d] dark:hover:bg-[#e5484d] dark:hover:text-white border border-rose-200 dark:border-[#4c1e22] cursor-pointer'
                             }`}
                             title={
                               m.criteria.length <= 1
                                 ? 'Milestone must have at least 1 criterion'
-                                : 'Delete criterion'
+                                : 'Delete this criterion'
                             }
                           >
-                            ✕
+                            <span className="font-bold leading-none">✕</span>
+                            <span className="hidden sm:inline">Delete</span>
                           </button>
                         </div>
                       ))}
                     </div>
 
-                    {/* Add new custom criterion input */}
+                    {/* Add new custom criterion row */}
                     <div className="flex gap-2 pt-1">
                       <input
                         type="text"
-                        placeholder="Add verifiable acceptance criterion (e.g. Script extracts H1 tags using bs4)..."
+                        placeholder="Type new acceptance criterion (or click + Add Criterion to insert a blank one)..."
                         value={criterionDrafts[m.id] || ''}
                         onChange={(e) =>
                           setCriterionDrafts((prev) => ({ ...prev, [m.id]: e.target.value }))
@@ -903,17 +928,18 @@ export default function NewJobPage() {
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
                             e.preventDefault();
-                            handleAddCriterion(m.id);
+                            handleAddCriterion(idx);
                           }
                         }}
-                        className="flex-1 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] px-3 py-1.5 text-[11px] text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-indigo-500 dark:focus:border-[#4cb782]"
+                        className="flex-1 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] px-3 py-2 text-xs font-mono text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-indigo-500 dark:focus:border-[#4cb782] placeholder:text-slate-400"
                       />
                       <button
                         type="button"
-                        onClick={() => handleAddCriterion(m.id)}
-                        className="px-3 py-1.5 rounded bg-slate-200 text-slate-800 dark:bg-[#1a1b1e] dark:text-[#ececed] hover:bg-slate-300 dark:hover:bg-[#212225] text-[11px] font-bold transition-colors cursor-pointer"
+                        onClick={() => handleAddCriterion(idx)}
+                        className="px-3.5 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] hover:bg-slate-800 dark:hover:bg-white text-xs font-mono font-bold transition-colors cursor-pointer shadow-sm shrink-0 flex items-center gap-1"
                       >
-                        + Add Criterion
+                        <span>+</span>
+                        <span>Add Criterion</span>
                       </button>
                     </div>
                   </div>
