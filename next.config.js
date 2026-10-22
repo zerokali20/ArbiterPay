@@ -1,6 +1,4 @@
 /** @type {import('next').NextConfig} */
-const path = require('path');
-
 const nextConfig = {
   reactStrictMode: true,
   eslint: {
@@ -10,10 +8,6 @@ const nextConfig = {
   typescript: {
     // Typecheck is checked independently via `npm run typecheck`
     ignoreBuildErrors: true,
-  },
-  webpack: (config) => {
-    config.resolve.alias['@'] = path.resolve(__dirname);
-    return config;
   },
 };
 
