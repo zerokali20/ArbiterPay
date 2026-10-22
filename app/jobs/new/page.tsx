@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
@@ -15,6 +15,17 @@ interface MilestoneInput {
   description: string;
   amount: string;
   criteria: CriterionItem[];
+}
+
+interface CustomTemplate {
+  id: string;
+  name: string;
+  title: string;
+  description: string;
+  totalBudget: string;
+  splitStrategy: 'equal' | 'front_loaded' | 'back_loaded' | 'custom';
+  milestones: MilestoneInput[];
+  createdAt: string;
 }
 
 export default function NewJobPage() {
@@ -37,6 +48,27 @@ export default function NewJobPage() {
 
   // Criterion input drafts keyed by milestone stable ID
   const [criterionDrafts, setCriterionDrafts] = useState<{ [milestoneId: string]: string }>({});
+
+  // Active template indicator
+  const [activeTemplateId, setActiveTemplateId] = useState<string>('python_scraper');
+
+  // Custom Saved Templates state (persisted in localStorage)
+  const [savedTemplates, setSavedTemplates] = useState<CustomTemplate[]>([]);
+  const [isSaveModalOpen, setIsSaveModalOpen] = useState(false);
+  const [templateNameInput, setTemplateNameInput] = useState('');
+  const [saveSuccessMsg, setSaveSuccessMsg] = useState<string | null>(null);
+
+  // Load saved templates from localStorage on client mount
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem('arbiterpay_saved_templates');
+      if (stored) {
+        setSavedTemplates(JSON.parse(stored));
+      }
+    } catch (e) {
+      console.warn('Failed to load saved templates from localStorage:', e);
+    }
+  }, []);
 
   // Milestones state with stable unique IDs
   const [milestones, setMilestones] = useState<MilestoneInput[]>([
@@ -75,6 +107,7 @@ export default function NewJobPage() {
 
   // ── Preset Template Switcher ──────────────────────────────────────────────
   const applyTaskPreset = (presetType: 'python_scraper' | 'single_task' | 'microservice') => {
+    setActiveTemplateId(presetType);
     if (presetType === 'python_scraper') {
       setTitle('Python Web Scraper: URL → CSV of H1 Tags');
       setDescription(
@@ -168,6 +201,68 @@ export default function NewJobPage() {
         },
       ]);
     }
+  };
+
+  // ── Template Save & Load Mechanism ─────────────────────────────────────────
+  const handleSaveCurrentAsTemplate = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = templateNameInput.trim();
+    if (!name) return;
+
+    const newTemplate: CustomTemplate = {
+      id: `tmpl-${Date.now()}`,
+      name,
+      title,
+      description,
+      totalBudget,
+      splitStrategy,
+      milestones,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [newTemplate, ...savedTemplates.filter((t) => t.name !== name)];
+    setSavedTemplates(updated);
+    try {
+      localStorage.setItem('arbiterpay_saved_templates', JSON.stringify(updated));
+    } catch (err) {
+      console.warn('Failed to save template to localStorage:', err);
+    }
+
+    setActiveTemplateId(newTemplate.id);
+    setTemplateNameInput('');
+    setIsSaveModalOpen(false);
+    setSaveSuccessMsg(`Template "${name}" saved!`);
+    setTimeout(() => setSaveSuccessMsg(null), 3000);
+  };
+
+  const deleteSavedTemplate = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    const updated = savedTemplates.filter((t) => t.id !== id);
+    setSavedTemplates(updated);
+    try {
+      localStorage.setItem('arbiterpay_saved_templates', JSON.stringify(updated));
+    } catch {}
+    if (activeTemplateId === id) setActiveTemplateId('');
+  };
+
+  const loadCustomTemplate = (t: CustomTemplate) => {
+    setActiveTemplateId(t.id);
+    setTitle(t.title);
+    setDescription(t.description);
+    setTotalBudget(t.totalBudget);
+    setSplitStrategy(t.splitStrategy || 'equal');
+    setMilestones(
+      t.milestones.map((m, i) => ({
+        ...m,
+        id: `ms-${Date.now()}-${i}`,
+        criteria: m.criteria.map((c, ci) => ({
+          ...c,
+          id: `crit-${Date.now()}-${i}-${ci}`,
+        })),
+      }))
+    );
+    setSaveSuccessMsg(`Loaded "${t.name}"`);
+    setTimeout(() => setSaveSuccessMsg(null), 2500);
   };
 
   // ── Split Money Mechanism ──────────────────────────────────────────────────
@@ -339,7 +434,7 @@ export default function NewJobPage() {
     }
   };
 
-  // ── Criteria Management (Rock-Solid Index-Based Operations) ───────────────
+  // ── Criteria Management (Index-Based Operations) ───────────────────────────
   
   // 1. Edit an existing criterion's text directly
   const handleCriterionChange = (milestoneIdx: number, critIdx: number, newText: string) => {
@@ -377,7 +472,6 @@ export default function NewJobPage() {
       return copy;
     });
 
-    // Clear input draft
     if (criterionDrafts[targetM.id]) {
       setCriterionDrafts((prev) => ({ ...prev, [targetM.id]: '' }));
     }
@@ -464,48 +558,190 @@ export default function NewJobPage() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-8 font-sans">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <div className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] uppercase tracking-wider">
-            Escrow Contract Builder
-          </div>
-          <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#ececed] mt-1 font-heading">
-            Create Escrow Job
-          </h1>
-          <p className="text-xs font-mono text-slate-600 dark:text-[#81848b] mt-0.5">
-            Manage milestones (1–6) &amp; acceptance criteria with real-time budget auto-balancing.
-          </p>
+    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-10 space-y-6 font-sans">
+      
+      {/* ── Page Header ───────────────────────────────────────────────────── */}
+      <div>
+        <div className="text-[11px] font-mono text-slate-500 dark:text-[#81848b] uppercase tracking-wider">
+          Escrow Contract Builder
         </div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 dark:text-[#ececed] mt-1 font-heading">
+          Create Escrow Job
+        </h1>
+        <p className="text-xs font-mono text-slate-600 dark:text-[#81848b] mt-0.5">
+          Select or save contract templates, define verifiable acceptance criteria, and fund via PayPal sandbox.
+        </p>
+      </div>
 
-        {/* Quick Template Presets */}
-        <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-lg bg-slate-100 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] text-xs font-mono">
-          <span className="text-[10px] text-slate-500 dark:text-[#81848b] px-1 font-semibold uppercase">Templates:</span>
+      {/* ── TEMPLATES BAR (SINGLE CLEAN ROW) ──────────────────────────────── */}
+      <div className="p-3 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] flex flex-col md:flex-row md:items-center justify-between gap-3 font-mono text-xs transition-colors shadow-sm">
+        
+        {/* Left: Single horizontal row of template pills */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+          <div className="flex items-center gap-1.5 shrink-0 text-slate-500 dark:text-[#81848b] text-[11px] font-bold uppercase tracking-wider pr-1">
+            <span>⚡</span>
+            <span>Templates:</span>
+          </div>
+
+          {/* Preset 1: Python Scraper */}
           <button
             type="button"
             onClick={() => applyTaskPreset('python_scraper')}
-            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors cursor-pointer"
+            className={`px-3 py-1.5 rounded border text-xs whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              activeTemplateId === 'python_scraper'
+                ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
+                : 'bg-slate-50 dark:bg-[#141517] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:border-slate-400 dark:hover:border-[#373a6e]'
+            }`}
           >
-            🐍 Python Scraper (2)
+            <span>🐍</span>
+            <span>Python Scraper</span>
+            <span className="text-[10px] opacity-70">(2 ms • $150)</span>
           </button>
+
+          {/* Preset 2: Single Task */}
           <button
             type="button"
             onClick={() => applyTaskPreset('single_task')}
-            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors cursor-pointer"
+            className={`px-3 py-1.5 rounded border text-xs whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              activeTemplateId === 'single_task'
+                ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
+                : 'bg-slate-50 dark:bg-[#141517] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:border-slate-400 dark:hover:border-[#373a6e]'
+            }`}
           >
-            ⚡ Single Task (1)
+            <span>⚡</span>
+            <span>Single Task</span>
+            <span className="text-[10px] opacity-70">(1 ms • $100)</span>
           </button>
+
+          {/* Preset 3: Microservice */}
           <button
             type="button"
             onClick={() => applyTaskPreset('microservice')}
-            className="px-2 py-1 rounded bg-white dark:bg-[#0e0f10] text-slate-800 dark:text-[#ececed] border border-slate-200 dark:border-[#212225] hover:border-indigo-400 dark:hover:border-[#4cb782] text-[11px] transition-colors cursor-pointer"
+            className={`px-3 py-1.5 rounded border text-xs whitespace-nowrap transition-colors flex items-center gap-1.5 cursor-pointer shrink-0 ${
+              activeTemplateId === 'microservice'
+                ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold'
+                : 'bg-slate-50 dark:bg-[#141517] text-slate-700 dark:text-[#81848b] border-slate-200 dark:border-[#212225] hover:border-slate-400 dark:hover:border-[#373a6e]'
+            }`}
           >
-            📦 Microservice (3)
+            <span>📦</span>
+            <span>Microservice</span>
+            <span className="text-[10px] opacity-70">(3 ms • $150)</span>
+          </button>
+
+          {/* Custom Saved Templates */}
+          {savedTemplates.map((t) => (
+            <div
+              key={t.id}
+              className={`inline-flex items-center rounded border text-xs whitespace-nowrap transition-colors shrink-0 ${
+                activeTemplateId === t.id
+                  ? 'bg-indigo-600 text-white border-indigo-600 font-bold'
+                  : 'bg-indigo-50 dark:bg-[#1a1c2e] text-indigo-700 dark:text-[#9fa6fc] border-indigo-200 dark:border-[#373a6e]'
+              }`}
+            >
+              <button
+                type="button"
+                onClick={() => loadCustomTemplate(t)}
+                className="px-2.5 py-1.5 flex items-center gap-1.5 cursor-pointer hover:underline"
+                title={`Load "${t.name}"`}
+              >
+                <span>📁</span>
+                <span className="max-w-[120px] truncate">{t.name}</span>
+                <span className="text-[10px] opacity-75">({t.milestones.length} ms)</span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => deleteSavedTemplate(t.id, e)}
+                title="Delete template"
+                className="px-2 py-1.5 opacity-60 hover:opacity-100 hover:text-rose-500 cursor-pointer border-l border-current/20"
+              >
+                ✕
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* Right: Save Template Action & Status */}
+        <div className="shrink-0 flex items-center gap-2 justify-end">
+          {saveSuccessMsg && (
+            <span className="text-[11px] text-emerald-600 dark:text-[#4cb782] font-semibold animate-fade-in">
+              ✓ {saveSuccessMsg}
+            </span>
+          )}
+          <button
+            type="button"
+            onClick={() => setIsSaveModalOpen(true)}
+            className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] border border-slate-200 dark:border-[#2d2f33] text-slate-800 dark:text-[#ececed] text-xs font-mono font-medium transition-colors flex items-center gap-1.5 cursor-pointer shrink-0"
+          >
+            <span>💾</span>
+            <span>Save as Template</span>
           </button>
         </div>
       </div>
 
+      {/* ── SAVE TEMPLATE MODAL ────────────────────────────────────────────── */}
+      {isSaveModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] rounded-xl max-w-md w-full p-6 space-y-4 shadow-xl font-mono text-xs">
+            <div className="flex justify-between items-center border-b border-slate-200 dark:border-[#212225] pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-base">💾</span>
+                <h3 className="font-bold text-sm text-slate-900 dark:text-[#ececed]">
+                  Save Configuration as Template
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSaveModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 dark:hover:text-[#ececed] text-sm p-1"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-3 rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] space-y-1 text-[11px] text-slate-600 dark:text-[#81848b]">
+              <div><strong className="text-slate-900 dark:text-[#ececed]">Title:</strong> {title}</div>
+              <div><strong className="text-slate-900 dark:text-[#ececed]">Budget:</strong> ${totalBudget} USD ({milestones.length} milestones)</div>
+              <div><strong className="text-slate-900 dark:text-[#ececed]">Criteria:</strong> {milestones.reduce((acc, m) => acc + m.criteria.length, 0)} total criteria items</div>
+            </div>
+
+            <form onSubmit={handleSaveCurrentAsTemplate} className="space-y-4">
+              <div className="space-y-1.5">
+                <label className="block text-slate-700 dark:text-[#ececed] font-medium">
+                  Template Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Next.js API Contract, Python Scraper 2-Stage..."
+                  value={templateNameInput}
+                  onChange={(e) => setTemplateNameInput(e.target.value)}
+                  autoFocus
+                  className="w-full rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] px-3 py-2 text-xs text-slate-900 dark:text-[#ececed] focus:outline-none focus:border-indigo-500 dark:focus:border-[#4cb782]"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSaveModalOpen(false)}
+                  className="px-3 py-2 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] text-slate-700 dark:text-[#81848b] text-xs transition-colors cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!templateNameInput.trim()}
+                  className="px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] hover:bg-slate-800 dark:hover:bg-white font-bold text-xs transition-colors cursor-pointer disabled:opacity-40"
+                >
+                  Save Template
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── MAIN CONTRACT FORM ─────────────────────────────────────────────── */}
       <form onSubmit={handleSubmit} className="space-y-6 p-6 rounded-lg bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] transition-colors">
         
         {/* Job Title & Scope */}
