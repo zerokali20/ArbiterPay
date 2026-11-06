@@ -46,13 +46,13 @@ function JobDetailContent() {
 
   // ── Freelancer submission state ─────────────────────────────────────────
   const [submittingMilestone, setSubmittingMilestone] = useState<number | null>(null);
-  const [uploadedCode, setUploadedCode] = useState('');
-  const [uploadedFileName, setUploadedFileName] = useState('');
+  const [uploadedFiles, setUploadedFiles] = useState<Array<{ name: string; content: string; size: number }>>([]);
   const [pastedCode, setPastedCode] = useState('');
   const [activeInputTab, setActiveInputTab] = useState<'upload' | 'paste'>('upload');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [evaluating, setEvaluating] = useState(false);
   const [verdictResult, setVerdictResult] = useState<any>(null);
+  const [zipExtracting, setZipExtracting] = useState(false);
 
   // ── Load job ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -149,47 +149,158 @@ function JobDetailContent() {
     }
   };
 
-  // ── File Upload ─────────────────────────────────────────────────────────
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploadedFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => setUploadedCode(ev.target?.result as string || '');
-    reader.readAsText(file);
+  // ── File Upload (Multi-File + ZIP Support) ──────────────────────────────
+  const TEXT_EXTENSIONS = new Set([
+    '.py', '.js', '.ts', '.jsx', '.tsx', '.go', '.rb', '.java', '.cpp', '.cs',
+    '.txt', '.md', '.json', '.yaml', '.yml', '.toml', '.cfg', '.ini', '.env',
+    '.html', '.css', '.scss', '.sql', '.sh', '.bash', '.rs', '.c', '.h',
+    '.xml', '.csv', '.dockerfile', '.makefile', '.gitignore', '.lock',
+  ]);
+
+  const isTextFile = (name: string): boolean => {
+    const lower = name.toLowerCase();
+    if (lower === 'dockerfile' || lower === 'makefile' || lower === 'readme' || lower === 'license') return true;
+    const ext = '.' + lower.split('.').pop();
+    return TEXT_EXTENSIONS.has(ext);
   };
 
-  const handleDropZone = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    setUploadedFileName(file.name);
-    const reader = new FileReader();
-    reader.onload = (ev) => setUploadedCode(ev.target?.result as string || '');
-    reader.readAsText(file);
+  const readFileAsText = (file: File): Promise<string> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string || '');
+      reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+      reader.readAsText(file);
+    });
+
+  const readFileAsArrayBuffer = (file: File): Promise<ArrayBuffer> =>
+    new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as ArrayBuffer);
+      reader.onerror = () => reject(new Error(`Failed to read ${file.name}`));
+      reader.readAsArrayBuffer(file);
+    });
+
+  const extractZip = async (file: File) => {
+    setZipExtracting(true);
+    try {
+      const JSZip = (await import('jszip')).default;
+      const buf = await readFileAsArrayBuffer(file);
+      const zip = await JSZip.loadAsync(buf);
+      const extracted: Array<{ name: string; content: string; size: number }> = [];
+
+      const entries = Object.entries(zip.files);
+      for (const [path, zipEntry] of entries) {
+        if (zipEntry.dir) continue;
+        // Skip hidden files and common non-code dirs
+        const segments = path.split('/');
+        if (segments.some(s => s.startsWith('.') || s === 'node_modules' || s === '__pycache__' || s === '.git')) continue;
+        if (!isTextFile(path)) continue;
+
+        try {
+          const text = await zipEntry.async('text');
+          if (text.length > 0 && text.length < 200_000) {
+            extracted.push({ name: path, content: text, size: text.length });
+          }
+        } catch {
+          // skip binary/unreadable files
+        }
+      }
+      return extracted;
+    } finally {
+      setZipExtracting(false);
+    }
   };
+
+  const processFiles = async (fileList: FileList) => {
+    const newFiles: Array<{ name: string; content: string; size: number }> = [];
+
+    for (let i = 0; i < fileList.length; i++) {
+      const file = fileList[i];
+
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        const extracted = await extractZip(file);
+        newFiles.push(...extracted);
+      } else if (isTextFile(file.name) || file.type.startsWith('text/')) {
+        const content = await readFileAsText(file);
+        newFiles.push({ name: file.name, content, size: content.length });
+      }
+    }
+
+    // De-duplicate by name, keep latest
+    setUploadedFiles(prev => {
+      const combined = [...prev];
+      for (const f of newFiles) {
+        const existIdx = combined.findIndex(x => x.name === f.name);
+        if (existIdx >= 0) combined[existIdx] = f;
+        else combined.push(f);
+      }
+      return combined;
+    });
+  };
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    await processFiles(files);
+    // Reset input so the same file can be re-selected
+    e.target.value = '';
+  };
+
+  const handleDropZone = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const files = e.dataTransfer.files;
+    if (!files || files.length === 0) return;
+    await processFiles(files);
+  };
+
+  const removeUploadedFile = (index: number) => {
+    setUploadedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const clearAllFiles = () => {
+    setUploadedFiles([]);
+  };
+
+  const totalUploadedLines = uploadedFiles.reduce((sum, f) => sum + f.content.split('\n').length, 0);
 
   // ── Submit Code for AI Evaluation ───────────────────────────────────────
   const handleSubmitCode = async (milestoneIdx: number) => {
     const m = milestonesList[milestoneIdx];
-    const codeToEvaluate = activeInputTab === 'upload' ? uploadedCode : pastedCode;
 
-    if (!codeToEvaluate.trim()) {
-      alert('Please upload or paste your code before submitting for evaluation.');
-      return;
+    if (activeInputTab === 'upload') {
+      if (uploadedFiles.length === 0) {
+        alert('Please upload at least one file before submitting for evaluation.');
+        return;
+      }
+    } else {
+      if (!pastedCode.trim()) {
+        alert('Please paste your code before submitting for evaluation.');
+        return;
+      }
     }
 
     setEvaluating(true);
     try {
+      // Build the submission payload
+      const isMultiFile = activeInputTab === 'upload' && uploadedFiles.length > 0;
+      const primaryFile = isMultiFile ? uploadedFiles[0] : null;
+      const codeContent = isMultiFile
+        ? primaryFile!.content
+        : pastedCode;
+      const filesInspected = isMultiFile
+        ? uploadedFiles.map(f => ({ path: f.name, content: f.content }))
+        : undefined;
+
       const res = await fetch('/api/submissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           milestoneId: m.id,
           jobId,
-          submissionType: activeInputTab === 'upload' ? 'file_upload' : 'text',
-          codeContent: codeToEvaluate,
-          fileName: uploadedFileName || 'submission.py',
+          submissionType: isMultiFile ? 'file_upload' : 'text',
+          codeContent,
+          fileName: primaryFile?.name || 'submission.py',
+          filesInspected,
           taskPrompt: m.description || jobData?.description,
           freelancerPayPalEmail:
             jobData?.freelancerPayPalEmail || 'sb-okeek53339723@personal.example.com',
@@ -491,7 +602,7 @@ function JobDetailContent() {
                         onClick={() => setActiveInputTab('upload')}
                         className={`px-2.5 py-1 rounded text-[11px] font-mono border transition-colors ${activeInputTab === 'upload' ? 'bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] border-slate-900 dark:border-white font-bold' : 'bg-white dark:bg-[#0e0f10] text-slate-600 dark:text-[#81848b] border-slate-200 dark:border-[#212225]'}`}
                       >
-                        📁 Upload File
+                        📁 Upload Files
                       </button>
                       <button
                         onClick={() => setActiveInputTab('paste')}
@@ -503,35 +614,109 @@ function JobDetailContent() {
                   </div>
 
                   {activeInputTab === 'upload' ? (
-                    <div
-                      onDragOver={(e) => e.preventDefault()}
-                      onDrop={handleDropZone}
-                      onClick={() => fileInputRef.current?.click()}
-                      className={`flex flex-col items-center justify-center gap-2 p-6 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
-                        uploadedCode
-                          ? 'border-emerald-400 bg-emerald-50/50 dark:bg-[#0f1713]'
-                          : 'border-slate-300 dark:border-[#2d2f33] bg-white dark:bg-[#0e0f10] hover:border-slate-400 dark:hover:border-[#3d3f44]'
-                      }`}
-                    >
-                      <input
-                        type="file"
-                        ref={fileInputRef}
-                        accept=".py,.js,.ts,.jsx,.tsx,.go,.rb,.java,.cpp,.cs,.txt"
-                        className="hidden"
-                        onChange={handleFileChange}
-                      />
-                      {uploadedCode ? (
-                        <>
-                          <div className="text-2xl">✓</div>
-                          <div className="text-xs font-mono text-emerald-700 dark:text-[#4cb782] font-bold">{uploadedFileName}</div>
-                          <div className="text-[11px] text-slate-500 dark:text-[#81848b]">{uploadedCode.split('\n').length} lines · Click to replace</div>
-                        </>
-                      ) : (
-                        <>
-                          <div className="text-2xl">📂</div>
-                          <div className="text-xs font-mono text-slate-700 dark:text-[#ececed] font-bold">Drop code file here or click to browse</div>
-                          <div className="text-[11px] text-slate-500 dark:text-[#81848b]">.py .js .ts .go .rb .java .cpp .cs .txt</div>
-                        </>
+                    <div className="space-y-3">
+                      {/* Drop zone */}
+                      <div
+                        onDragOver={(e) => e.preventDefault()}
+                        onDrop={handleDropZone}
+                        onClick={() => fileInputRef.current?.click()}
+                        className={`flex flex-col items-center justify-center gap-2 p-5 rounded-lg border-2 border-dashed cursor-pointer transition-colors ${
+                          uploadedFiles.length > 0
+                            ? 'border-emerald-400 bg-emerald-50/50 dark:bg-[#0f1713]'
+                            : 'border-slate-300 dark:border-[#2d2f33] bg-white dark:bg-[#0e0f10] hover:border-slate-400 dark:hover:border-[#3d3f44]'
+                        }`}
+                      >
+                        <input
+                          type="file"
+                          ref={fileInputRef}
+                          accept=".py,.js,.ts,.jsx,.tsx,.go,.rb,.java,.cpp,.cs,.txt,.md,.json,.yaml,.yml,.toml,.html,.css,.sql,.sh,.rs,.c,.h,.zip"
+                          multiple
+                          className="hidden"
+                          onChange={handleFileChange}
+                        />
+                        {zipExtracting ? (
+                          <>
+                            <span className="w-5 h-5 rounded-full border-2 border-slate-400 border-t-emerald-500 animate-spin" />
+                            <div className="text-xs font-mono text-slate-700 dark:text-[#ececed] font-bold">Extracting ZIP archive…</div>
+                          </>
+                        ) : (
+                          <>
+                            <div className="text-2xl">{uploadedFiles.length > 0 ? '➕' : '📂'}</div>
+                            <div className="text-xs font-mono text-slate-700 dark:text-[#ececed] font-bold">
+                              {uploadedFiles.length > 0
+                                ? 'Click or drop to add more files'
+                                : 'Drop files here or click to browse'}
+                            </div>
+                            <div className="text-[11px] text-slate-500 dark:text-[#81848b]">
+                              Multiple files supported · .py .js .ts .go .java .zip + more
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Uploaded files list */}
+                      {uploadedFiles.length > 0 && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[11px] font-mono font-bold text-slate-700 dark:text-[#ececed] uppercase tracking-wider">
+                              Uploaded Files ({uploadedFiles.length})
+                            </span>
+                            <div className="flex items-center gap-2">
+                              <span className="text-[10px] font-mono text-slate-500 dark:text-[#81848b]">
+                                {totalUploadedLines} lines total
+                              </span>
+                              <button
+                                type="button"
+                                onClick={clearAllFiles}
+                                className="text-[10px] font-mono text-rose-600 hover:text-rose-700 dark:text-[#e5484d] dark:hover:text-rose-400 cursor-pointer"
+                              >
+                                Clear All
+                              </button>
+                            </div>
+                          </div>
+                          <div className="max-h-48 overflow-y-auto space-y-1 pr-1">
+                            {uploadedFiles.map((f, fIdx) => (
+                              <div
+                                key={`${f.name}-${fIdx}`}
+                                className="flex items-center gap-2 px-2.5 py-1.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] group transition-colors"
+                              >
+                                <span className="text-[11px] font-mono text-slate-400 dark:text-[#81848b] w-5 text-right shrink-0 select-none">
+                                  {fIdx + 1}.
+                                </span>
+                                <span className="text-xs font-mono text-emerald-700 dark:text-[#4cb782] truncate flex-1 min-w-0" title={f.name}>
+                                  {f.name}
+                                </span>
+                                <span className="text-[10px] font-mono text-slate-400 dark:text-[#81848b] shrink-0">
+                                  {f.content.split('\n').length} ln · {f.size > 1024 ? `${(f.size / 1024).toFixed(1)}KB` : `${f.size}B`}
+                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); removeUploadedFile(fIdx); }}
+                                  className="text-[11px] text-slate-400 hover:text-rose-600 dark:hover:text-[#e5484d] opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer px-1 shrink-0"
+                                  title={`Remove ${f.name}`}
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Preview of first file */}
+                      {uploadedFiles.length > 0 && (
+                        <div className="rounded bg-slate-900 dark:bg-[#08090a] border border-slate-700 dark:border-[#212225] p-3 font-mono text-[11px] text-green-400 overflow-auto max-h-32">
+                          <div className="text-slate-500 text-[10px] mb-1.5 select-none">
+                            Preview: {uploadedFiles[0].name}
+                            {uploadedFiles.length > 1 && ` (+${uploadedFiles.length - 1} more file${uploadedFiles.length > 2 ? 's' : ''})`}
+                          </div>
+                          {uploadedFiles[0].content.split('\n').slice(0, 6).map((line, i) => (
+                            <div key={i}><span className="text-slate-600 mr-3 select-none">{i + 1}</span>{line}</div>
+                          ))}
+                          {uploadedFiles[0].content.split('\n').length > 6 && (
+                            <div className="text-slate-600 mt-1">… {uploadedFiles[0].content.split('\n').length - 6} more lines</div>
+                          )}
+                        </div>
                       )}
                     </div>
                   ) : (
@@ -561,22 +746,10 @@ def extract_h1_to_csv(url):
                     </div>
                   )}
 
-                  {/* Preview snippet */}
-                  {(activeInputTab === 'upload' && uploadedCode) && (
-                    <div className="rounded bg-slate-900 dark:bg-[#08090a] border border-slate-700 dark:border-[#212225] p-3 font-mono text-[11px] text-green-400 overflow-auto max-h-32">
-                      {uploadedCode.split('\n').slice(0, 6).map((line, i) => (
-                        <div key={i}><span className="text-slate-600 mr-3 select-none">{i + 1}</span>{line}</div>
-                      ))}
-                      {uploadedCode.split('\n').length > 6 && (
-                        <div className="text-slate-600 mt-1">… {uploadedCode.split('\n').length - 6} more lines</div>
-                      )}
-                    </div>
-                  )}
-
                   <div className="flex items-center gap-2 pt-1">
                     <button
                       onClick={() => handleSubmitCode(idx)}
-                      disabled={evaluating || !(activeInputTab === 'upload' ? uploadedCode : pastedCode).trim()}
+                      disabled={evaluating || (activeInputTab === 'upload' ? uploadedFiles.length === 0 : !pastedCode.trim())}
                       className="px-4 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white disabled:opacity-40 transition-colors cursor-pointer flex items-center gap-2"
                     >
                       {evaluating ? (
@@ -586,7 +759,7 @@ def extract_h1_to_csv(url):
                       )}
                     </button>
                     <button
-                      onClick={() => { setSubmittingMilestone(null); setUploadedCode(''); setUploadedFileName(''); setPastedCode(''); }}
+                      onClick={() => { setSubmittingMilestone(null); setUploadedFiles([]); setPastedCode(''); }}
                       className="px-3 py-2 rounded bg-slate-200 text-slate-700 hover:bg-slate-300 dark:bg-[#1a1b1e] dark:text-[#81848b] dark:hover:text-white text-xs font-mono cursor-pointer transition-colors"
                     >
                       Cancel
