@@ -53,6 +53,8 @@ function JobDetailContent() {
   const [evaluating, setEvaluating] = useState(false);
   const [verdictResult, setVerdictResult] = useState<any>(null);
   const [zipExtracting, setZipExtracting] = useState(false);
+  const [releasingMilestone, setReleasingMilestone] = useState<string | null>(null);
+  const [releaseSuccessMsg, setReleaseSuccessMsg] = useState<string | null>(null);
 
   // ── Load job ────────────────────────────────────────────────────────────
   useEffect(() => {
@@ -146,6 +148,67 @@ function JobDetailContent() {
       setFundingError(err.message);
     } finally {
       setFunding(false);
+    }
+  };
+
+  const handlePayPalCheckout = async () => {
+    if (!jobData) return;
+    setFunding(true);
+    setFundingError(null);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/fund`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create_order', amount: jobData.totalAmount }),
+      });
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch {
+        throw new Error(`Server response (${res.status}): ${text.slice(0, 80)}`);
+      }
+      if (!res.ok) throw new Error(data.error || 'Failed to initialize PayPal Checkout');
+      if (data.approvalUrl) {
+        window.location.href = data.approvalUrl;
+      } else {
+        throw new Error('No PayPal approval link returned');
+      }
+    } catch (err: any) {
+      setFundingError(err.message);
+      setFunding(false);
+    }
+  };
+
+  const handleClientApproveMilestone = async (milestoneId: string, title: string, amount: string) => {
+    const confirmRelease = window.confirm(
+      `Confirm Payout Release:\n\nRelease $${amount} USD to freelancer (${freelancerEmail}) for "${title}"?\n\nThis will trigger an independent PayPal Payout for this milestone only.`
+    );
+    if (!confirmRelease) return;
+
+    setReleasingMilestone(milestoneId);
+    try {
+      const res = await fetch(`/api/jobs/${jobId}/payout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          milestoneId,
+          reason: `Client direct approval and payout release for ${title}`,
+        }),
+      });
+
+      const text = await res.text();
+      let data: any;
+      try { data = JSON.parse(text); } catch {
+        throw new Error(`Server error (${res.status}): ${text.slice(0, 80)}`);
+      }
+      if (!res.ok) throw new Error(data.error || 'Payout release failed');
+
+      setMilestonesList(prev => prev.map(m => m.id === milestoneId ? { ...m, status: 'paid' } : m));
+      setReleaseSuccessMsg(`✓ Milestone payout ($${amount} USD) released to ${freelancerEmail}! PayPal Batch ID: ${data.payoutBatchId}`);
+      setTimeout(() => setReleaseSuccessMsg(null), 7000);
+    } catch (err: any) {
+      alert(`Payout release error: ${err.message}`);
+    } finally {
+      setReleasingMilestone(null);
     }
   };
 
@@ -406,32 +469,144 @@ function JobDetailContent() {
 
         <div className="flex flex-col gap-2 sm:items-end">
           {jobStatus === 'draft' ? (
-            <>
-              <button
-                onClick={handleFundEscrow}
-                disabled={funding}
-                className="px-4 py-2.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white disabled:opacity-50 whitespace-nowrap flex items-center gap-2 cursor-pointer transition-colors"
-              >
-                {funding ? (
-                  <><span className="w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-white animate-spin" /><span>Funding Escrow…</span></>
-                ) : (
-                  <span>Fund ${jobData.totalAmount} via PayPal Sandbox</span>
-                )}
-              </button>
+            <div className="space-y-2 text-right">
+              <div className="flex flex-wrap gap-2 justify-end">
+                <button
+                  onClick={handleFundEscrow}
+                  disabled={funding}
+                  className="px-3.5 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white disabled:opacity-50 whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                  title="One-click sandbox demo capture"
+                >
+                  {funding ? (
+                    <><span className="w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-white animate-spin" /><span>Funding Escrow…</span></>
+                  ) : (
+                    <span>⚡ Instant Demo Fund (${jobData.totalAmount})</span>
+                  )}
+                </button>
+                <button
+                  onClick={handlePayPalCheckout}
+                  disabled={funding}
+                  className="px-3.5 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-mono text-xs font-bold disabled:opacity-50 whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
+                  title="Opens real PayPal Sandbox checkout where client logs in to pay"
+                >
+                  <span>🌐 PayPal Sandbox Checkout</span>
+                </button>
+              </div>
+
+              {/* PayPal Sandbox Account Credentials Tooltip */}
+              <div className="p-2 rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] text-[10px] font-mono text-slate-500 dark:text-[#81848b] text-left max-w-sm">
+                <div><strong>Client Sandbox Login:</strong></div>
+                <div className="text-slate-800 dark:text-[#ececed] truncate">sb-bhnlh53339270@business.example.com</div>
+                <div className="text-slate-600 dark:text-[#9b9da3]">Password: <code className="bg-slate-200 dark:bg-[#212225] px-1 py-0.5 rounded text-[10px]">sUJ!9Akz</code></div>
+              </div>
+
               {approvalUrl && (
-                <a href={approvalUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-mono underline text-indigo-600 dark:text-[#4cb782]">
-                  Open PayPal login to approve
-                </a>
+                <div className="text-right">
+                  <a href={approvalUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-mono underline text-indigo-600 dark:text-[#4cb782]">
+                    Open PayPal login to complete approval →
+                  </a>
+                </div>
               )}
-            </>
+            </div>
           ) : (
             <div className="px-3.5 py-2 rounded bg-emerald-50 dark:bg-[#141517] border border-emerald-200 dark:border-[#254634] text-xs font-mono text-emerald-700 dark:text-[#4cb782]">
-              <div className="font-bold">✓ Escrow Funded (Orders v2 Captured)</div>
+              <div className="font-bold flex items-center gap-1.5">
+                <span>✓</span>
+                <span>Escrow Funded (Orders v2 Captured)</span>
+              </div>
               {captureId && <div className="text-[10px] text-slate-500 dark:text-[#81848b]">Capture ID: {captureId}</div>}
             </div>
           )}
         </div>
       </div>
+
+      {/* ── ESCROW ACCOUNT BALANCE & FUNDS FLOW VISUALIZER ────────────────── */}
+      {jobStatus === 'funded' && (() => {
+        const totalFunded = parseFloat(jobData.totalAmount) || 0;
+        const totalReleased = milestonesList
+          .filter((m) => m.status === 'paid' || m.status === 'passed')
+          .reduce((sum, m) => sum + (parseFloat(m.amount) || 0), 0);
+        const remainingEscrow = Math.max(0, totalFunded - totalReleased);
+
+        return (
+          <div className="p-5 rounded-lg bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] font-mono text-xs space-y-3 transition-colors">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 dark:border-[#212225] pb-2.5">
+              <div className="flex items-center gap-2">
+                <span className="font-bold text-slate-900 dark:text-[#ececed] uppercase tracking-wider text-[11px]">
+                  🏛️ Live Escrow Account Balance &amp; Transfer Tracker
+                </span>
+                <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-[#1a2e23] dark:text-[#4cb782]">
+                  PayPal Orders v2 &amp; Payouts
+                </span>
+              </div>
+              <span className="text-[11px] text-slate-500 dark:text-[#81848b]">
+                Funds release milestone-by-milestone upon verification
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Box 1: Client Account */}
+              <div className="p-3.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-[#81848b]">
+                  <span>Client (Payer Account)</span>
+                  <span className="text-rose-600 dark:text-[#e5484d] font-bold">DEBITED</span>
+                </div>
+                <div className="text-lg font-bold text-slate-900 dark:text-[#ececed]">
+                  -${totalFunded.toFixed(2)} USD
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-[#81848b] truncate" title={jobData.clientEmail || 'sb-bhnlh53339270@business.example.com'}>
+                  {jobData.clientEmail || 'sb-bhnlh53339270@business.example.com'}
+                </div>
+                <div className="text-[10px] text-emerald-600 dark:text-[#4cb782]">
+                  ✓ Deposited into ArbiterPay Escrow
+                </div>
+              </div>
+
+              {/* Box 2: Escrow Vault */}
+              <div className="p-3.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-[#81848b]">
+                  <span>ArbiterPay Escrow Vault</span>
+                  <span className="text-amber-600 dark:text-[#d9a441] font-bold">LOCKED</span>
+                </div>
+                <div className="text-lg font-bold text-slate-900 dark:text-[#ececed]">
+                  ${remainingEscrow.toFixed(2)} USD
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-[#81848b]">
+                  Released: ${totalReleased.toFixed(2)} / ${totalFunded.toFixed(2)} USD
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-[#81848b]">
+                  Capture: {captureId ? captureId.slice(0, 18) : 'Captured'}
+                </div>
+              </div>
+
+              {/* Box 3: Freelancer Account */}
+              <div className="p-3.5 rounded bg-white dark:bg-[#0e0f10] border border-slate-200 dark:border-[#212225] space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-[#81848b]">
+                  <span>Freelancer (Receiver)</span>
+                  <span className="text-emerald-600 dark:text-[#4cb782] font-bold">CREDITED</span>
+                </div>
+                <div className="text-lg font-bold text-emerald-700 dark:text-[#4cb782]">
+                  +${totalReleased.toFixed(2)} USD
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-[#81848b] truncate" title={freelancerEmail}>
+                  {freelancerEmail}
+                </div>
+                <div className="text-[10px] text-slate-500 dark:text-[#81848b]">
+                  Pending release: ${remainingEscrow.toFixed(2)} USD
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Direct Milestone Release Feedback */}
+      {releaseSuccessMsg && (
+        <div className="p-3.5 rounded-lg bg-emerald-50 dark:bg-[#1a2e23] border border-emerald-300 dark:border-[#254634] text-xs font-mono text-emerald-800 dark:text-[#4cb782] flex items-center gap-2 animate-fade-in">
+          <span>✓</span>
+          <span>{releaseSuccessMsg}</span>
+        </div>
+      )}
 
       {/* Funding error */}
       {fundingError && (
@@ -550,8 +725,8 @@ function JobDetailContent() {
                     <span className="text-xs font-mono text-slate-500 dark:text-[#81848b]">Amount: ${m.amount} USD</span>
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className={`text-xs font-mono px-2 py-0.5 rounded uppercase border ${
+                <div className="flex items-center gap-2.5 flex-wrap justify-end">
+                  <span className={`text-xs font-mono px-2 py-0.5 rounded uppercase border font-semibold ${
                     m.status === 'paid' || m.status === 'passed'
                       ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-[#1a2e23] dark:text-[#4cb782] dark:border-[#254634]'
                       : m.status === 'failed'
@@ -560,13 +735,45 @@ function JobDetailContent() {
                       ? 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-[#2a2417] dark:text-[#d9a441] dark:border-[#3f3521]'
                       : 'bg-slate-100 text-slate-600 border-slate-200 dark:bg-[#141517] dark:text-[#81848b] dark:border-[#212225]'
                   }`}>{m.status}</span>
+
                   {jobStatus === 'funded' && m.status !== 'paid' && m.status !== 'passed' && (
-                    <button
-                      onClick={() => { setSubmittingMilestone(idx); setVerdictResult(null); }}
-                      className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] border border-slate-200 dark:border-[#2d2f33] text-xs font-mono text-slate-800 dark:text-[#ececed] transition-colors cursor-pointer"
-                    >
-                      Submit code →
-                    </button>
+                    <div className="flex items-center gap-2">
+                      {/* Client Override Direct Payout Button */}
+                      <button
+                        type="button"
+                        onClick={() => handleClientApproveMilestone(m.id, m.title, m.amount)}
+                        disabled={releasingMilestone === m.id}
+                        className="px-2.5 py-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-mono font-bold transition-colors cursor-pointer flex items-center gap-1 shadow-sm disabled:opacity-50"
+                        title="Client Override: Directly approve and release this milestone payout to the freelancer"
+                      >
+                        {releasingMilestone === m.id ? (
+                          <>
+                            <span className="w-3 h-3 rounded-full border-2 border-white border-t-transparent animate-spin" />
+                            <span>Releasing...</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>✓</span>
+                            <span>Release ${m.amount}</span>
+                          </>
+                        )}
+                      </button>
+
+                      {/* Freelancer Submit / Resubmit Code Button */}
+                      <button
+                        type="button"
+                        onClick={() => { setSubmittingMilestone(idx); setVerdictResult(null); }}
+                        className="px-3 py-1.5 rounded bg-slate-100 hover:bg-slate-200 dark:bg-[#1a1b1e] dark:hover:bg-[#212225] border border-slate-200 dark:border-[#2d2f33] text-xs font-mono text-slate-800 dark:text-[#ececed] transition-colors cursor-pointer"
+                      >
+                        {m.status === 'partial' || m.status === 'failed' ? 'Resubmit code →' : 'Submit code →'}
+                      </button>
+                    </div>
+                  )}
+
+                  {(m.status === 'paid' || m.status === 'passed') && (
+                    <span className="text-[11px] font-mono text-emerald-600 dark:text-[#4cb782] font-semibold">
+                      ✓ Disbursed to {freelancerEmail.split('@')[0]}
+                    </span>
                   )}
                 </div>
               </div>
