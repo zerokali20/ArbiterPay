@@ -151,33 +151,6 @@ function JobDetailContent() {
     }
   };
 
-  const handlePayPalCheckout = async () => {
-    if (!jobData) return;
-    setFunding(true);
-    setFundingError(null);
-    try {
-      const res = await fetch(`/api/jobs/${jobId}/fund`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'create_order', amount: jobData.totalAmount }),
-      });
-      const text = await res.text();
-      let data: any;
-      try { data = JSON.parse(text); } catch {
-        throw new Error(`Server response (${res.status}): ${text.slice(0, 80)}`);
-      }
-      if (!res.ok) throw new Error(data.error || 'Failed to initialize PayPal Checkout');
-      if (data.approvalUrl) {
-        window.location.href = data.approvalUrl;
-      } else {
-        throw new Error('No PayPal approval link returned');
-      }
-    } catch (err: any) {
-      setFundingError(err.message);
-      setFunding(false);
-    }
-  };
-
   const handleClientApproveMilestone = async (milestoneId: string, title: string, amount: string) => {
     const confirmRelease = window.confirm(
       `Confirm Payout Release:\n\nRelease $${amount} USD to freelancer (${freelancerEmail}) for "${title}"?\n\nThis will trigger an independent PayPal Payout for this milestone only.`
@@ -469,45 +442,20 @@ function JobDetailContent() {
 
         <div className="flex flex-col gap-2 sm:items-end">
           {jobStatus === 'draft' ? (
-            <div className="space-y-2 text-right">
-              <div className="flex flex-wrap gap-2 justify-end">
-                <button
-                  onClick={handleFundEscrow}
-                  disabled={funding}
-                  className="px-3.5 py-2 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white disabled:opacity-50 whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
-                  title="One-click sandbox demo capture"
-                >
-                  {funding ? (
-                    <><span className="w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-white animate-spin" /><span>Funding Escrow…</span></>
-                  ) : (
-                    <span>⚡ Instant Demo Fund (${jobData.totalAmount})</span>
-                  )}
-                </button>
-                <button
-                  onClick={handlePayPalCheckout}
-                  disabled={funding}
-                  className="px-3.5 py-2 rounded bg-indigo-600 hover:bg-indigo-700 text-white font-mono text-xs font-bold disabled:opacity-50 whitespace-nowrap flex items-center gap-1.5 cursor-pointer transition-colors shadow-sm"
-                  title="Opens real PayPal Sandbox checkout where client logs in to pay"
-                >
-                  <span>🌐 PayPal Sandbox Checkout</span>
-                </button>
-              </div>
-
-              {/* PayPal Sandbox Account Credentials Tooltip */}
-              <div className="p-2 rounded bg-slate-50 dark:bg-[#141517] border border-slate-200 dark:border-[#212225] text-[10px] font-mono text-slate-500 dark:text-[#81848b] text-left max-w-sm">
-                <div><strong>Client Sandbox Login:</strong></div>
-                <div className="text-slate-800 dark:text-[#ececed] truncate">sb-bhnlh53339270@business.example.com</div>
-                <div className="text-slate-600 dark:text-[#9b9da3]">Password: <code className="bg-slate-200 dark:bg-[#212225] px-1 py-0.5 rounded text-[10px]">sUJ!9Akz</code></div>
-              </div>
-
-              {approvalUrl && (
-                <div className="text-right">
-                  <a href={approvalUrl} target="_blank" rel="noopener noreferrer" className="text-[11px] font-mono underline text-indigo-600 dark:text-[#4cb782]">
-                    Open PayPal login to complete approval →
-                  </a>
-                </div>
+            <button
+              onClick={handleFundEscrow}
+              disabled={funding}
+              className="px-5 py-2.5 rounded bg-slate-900 text-white dark:bg-[#ececed] dark:text-[#08090a] font-mono text-xs font-bold hover:bg-slate-800 dark:hover:bg-white disabled:opacity-50 whitespace-nowrap flex items-center gap-2 cursor-pointer transition-colors shadow-sm"
+            >
+              {funding ? (
+                <>
+                  <span className="w-3.5 h-3.5 rounded-full border-2 border-slate-400 border-t-white animate-spin" />
+                  <span>Funding Escrow via PayPal Sandbox…</span>
+                </>
+              ) : (
+                <span>Fund ${jobData.totalAmount} via PayPal Sandbox →</span>
               )}
-            </div>
+            </button>
           ) : (
             <div className="px-3.5 py-2 rounded bg-emerald-50 dark:bg-[#141517] border border-emerald-200 dark:border-[#254634] text-xs font-mono text-emerald-700 dark:text-[#4cb782]">
               <div className="font-bold flex items-center gap-1.5">
