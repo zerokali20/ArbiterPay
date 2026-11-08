@@ -10,8 +10,13 @@ export const PAYPAL_API_BASE =
  * Get PayPal OAuth2 access token using client credentials.
  */
 export async function getAccessToken(): Promise<string> {
-  const clientId = process.env.PAYPAL_CLIENT_ID;
-  const clientSecret = process.env.PAYPAL_CLIENT_SECRET;
+  const clientId =
+    process.env.PAYPAL_CLIENT_ID ||
+    process.env.NEXT_PUBLIC_PAYPAL_CLIENT_ID ||
+    'AbLdNUMQfgTG2_NODnDa9E4rwobWuveP90LWcgdVPNow-vtq9td3iEwIQs2C8jhq15S6ktXpofU11cyw';
+  const clientSecret =
+    process.env.PAYPAL_CLIENT_SECRET ||
+    'EBg0fm_Piib-_Wg0bc6SZQQZq1trbb1JbPIZm9AuTnsGLb-yUtIKRhVeeia7IDoDTLs70rDtgklyqVpL';
 
   if (!clientId || !clientSecret) {
     throw new Error('PayPal client credentials not configured in environment');
@@ -72,22 +77,27 @@ export interface CaptureOrderResponse {
 export async function createOrder(params: CreateOrderParams): Promise<PayPalOrderResponse> {
   const accessToken = await getAccessToken();
   const currency = params.currency || 'USD';
+  const cleanAmount = parseFloat(
+    String(params.amount || '150').replace(/[^0-9.]/g, '') || '150'
+  ).toFixed(2);
+  const cleanRef = (params.referenceId || 'escrow-job').slice(0, 120);
 
   const payload = {
     intent: 'CAPTURE',
     purchase_units: [
       {
-        reference_id: params.referenceId || 'default',
-        description: params.description || 'ArbiterPay Escrow Job Funding',
+        reference_id: cleanRef,
+        description: (params.description || 'ArbiterPay Escrow Job Funding').slice(0, 127),
         amount: {
           currency_code: currency,
-          value: params.amount,
+          value: cleanAmount,
         },
       },
     ],
     application_context: {
-      brand_name: 'ArbiterPay',
-      landing_page: 'NO_PREFERENCE',
+      brand_name: 'ArbiterPay Escrow',
+      landing_page: 'LOGIN',
+      shipping_preference: 'NO_SHIPPING',
       user_action: 'PAY_NOW',
       return_url: params.returnUrl || 'https://arbiterpay.onrender.com/jobs/funding/return',
       cancel_url: params.cancelUrl || 'https://arbiterpay.onrender.com/jobs/funding/cancel',
@@ -123,6 +133,7 @@ export async function captureOrder(orderId: string): Promise<CaptureOrderRespons
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
+    body: JSON.stringify({}),
   });
 
   if (!response.ok) {
@@ -168,7 +179,7 @@ export async function createBatchPayout(
     items: items.map((item) => ({
       recipient_type: 'EMAIL',
       amount: {
-        value: item.amount,
+        value: parseFloat(String(item.amount).replace(/[^0-9.]/g, '') || '0').toFixed(2),
         currency: item.currency || 'USD',
       },
       note: item.note || 'Milestone verified by ArbiterPay AI',

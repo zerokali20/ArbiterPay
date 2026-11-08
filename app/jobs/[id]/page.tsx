@@ -130,17 +130,24 @@ function JobDetailContent() {
     }
   };
 
+  // Check if window.paypal is already available on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined' && (window as any).paypal?.Buttons) {
+      setPaypalLoaded(true);
+    }
+  }, []);
+
   // ── Render PayPal Smart Buttons on container ────────────────────────────
   useEffect(() => {
     if (!paypalLoaded || jobStatus !== 'draft' || !jobData) return;
-    if (paypalButtonRendered.current) return;
-
     const el = document.getElementById('paypal-button-container');
     if (!el) return;
+    if (paypalButtonRendered.current) return;
 
     if ((window as any).paypal?.Buttons) {
       try {
         paypalButtonRendered.current = true;
+        el.innerHTML = '';
         (window as any).paypal
           .Buttons({
             style: {
@@ -154,20 +161,26 @@ function JobDetailContent() {
             createOrder: async () => {
               setFunding(true);
               setFundingError(null);
-              const res = await fetch(`/api/jobs/${jobId}/fund`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ action: 'create_order', amount: jobData.totalAmount }),
-              });
-              const data = await res.json();
-              if (!res.ok || !data.orderId) {
+              try {
+                const res = await fetch(`/api/jobs/${jobId}/fund`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ action: 'create_order', amount: jobData.totalAmount }),
+                });
+                const data = await res.json();
+                if (!res.ok || !data.orderId || data.orderId.startsWith('SANDBOX-ORD-')) {
+                  throw new Error(data.error || 'Failed to initialize PayPal Sandbox Order');
+                }
+                return data.orderId;
+              } catch (err: any) {
                 setFunding(false);
-                throw new Error(data.error || 'Failed to create PayPal order');
+                setFundingError(err.message || 'PayPal Sandbox Order initialization failed. You can use ⚡ 1-Click Demo Fund.');
+                throw err;
               }
-              return data.orderId;
             },
             onApprove: async (data: any) => {
-              await completeCapture(data.orderID);
+              console.log('PayPal onApprove orderID:', data?.orderID);
+              await completeCapture(data?.orderID);
             },
             onCancel: () => {
               setFunding(false);
@@ -175,11 +188,13 @@ function JobDetailContent() {
             onError: (err: any) => {
               console.warn('PayPal Smart Button error:', err);
               setFunding(false);
+              setFundingError('PayPal checkout encountered an issue. You can click ⚡ 1-Click Demo Fund to complete escrow instantly.');
             },
           })
           .render('#paypal-button-container');
       } catch (renderErr) {
         console.warn('PayPal Button render error:', renderErr);
+        paypalButtonRendered.current = false;
       }
     }
   }, [paypalLoaded, jobStatus, jobData, jobId]);

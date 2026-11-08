@@ -190,10 +190,7 @@ export async function POST(
       });
     }
 
-    // ── MODE C: ONLY CREATE ORDER (Step 1 without capture) ──
-    let createdOrderId = `SANDBOX-ORD-${Date.now().toString().slice(-8)}`;
-    let approvalUrl = `https://www.sandbox.paypal.com/checkoutnow?token=${createdOrderId}`;
-
+    // ── MODE C: ONLY CREATE ORDER (Step 1 for PayPal Smart Buttons) ──
     try {
       const orderData = await createOrder({
         amount: fundingAmount,
@@ -204,31 +201,41 @@ export async function POST(
         cancelUrl: `${appUrl}/jobs/${jobId}?cancelled=true`,
       });
 
-      if (orderData?.id) {
-        createdOrderId = orderData.id;
-        approvalUrl =
-          orderData.links?.find((l: any) => l.rel === 'approve')?.href || approvalUrl;
+      if (!orderData?.id) {
+        throw new Error('PayPal API returned empty Order ID');
       }
-    } catch (orderErr: any) {
-      console.warn('PayPal createOrder failed:', orderErr.message);
-    }
 
-    await recordLedgerEvent({
-      jobId,
-      eventType: 'ESCROW_FUND_INITIATED',
-      actorType: 'client',
-      details: {
+      const createdOrderId = orderData.id;
+      const approvalUrl =
+        orderData.links?.find((l: any) => l.rel === 'approve')?.href ||
+        `https://www.sandbox.paypal.com/checkoutnow?token=${createdOrderId}`;
+
+      await recordLedgerEvent({
+        jobId,
+        eventType: 'ESCROW_FUND_INITIATED',
+        actorType: 'client',
+        details: {
+          orderId: createdOrderId,
+          amount: fundingAmount,
+          approvalUrl,
+        },
+      });
+
+      return NextResponse.json({
+        success: true,
         orderId: createdOrderId,
-        amount: fundingAmount,
         approvalUrl,
-      },
-    });
-
-    return NextResponse.json({
-      success: true,
-      orderId: createdOrderId,
-      approvalUrl,
-    });
+      });
+    } catch (orderErr: any) {
+      console.error('PayPal createOrder failed in Mode C:', orderErr.message);
+      return NextResponse.json(
+        {
+          success: false,
+          error: `PayPal Sandbox Order creation failed: ${orderErr.message || 'API error'}`,
+        },
+        { status: 500 }
+      );
+    }
   } catch (error: any) {
     console.error('Funding route error:', error);
     return NextResponse.json(
